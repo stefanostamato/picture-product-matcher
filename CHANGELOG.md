@@ -1,11 +1,11 @@
 # CHANGELOG
 
-Each entry maps to a plan in `plans/`. Plans are right-sized task
-graphs the `/plan` command produced from a feature description; the
-`/execute` command then fans them out across parallel subagents.
-`NOTES.md` has the play-by-play and the originating prompts.
+Each entry maps to a plan in `plans/`, newest first. Plans are right-
+sized task graphs the `/plan` command produced from a feature
+description; the `/execute` command then fans them out across parallel
+subagents. `NOTES.md` has the play-by-play and the originating prompts.
 
-## initial-e2e
+## v1 — initial-e2e
 
 Plan: [`plans/initial-e2e.md`](plans/initial-e2e.md).
 

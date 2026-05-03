@@ -56,19 +56,36 @@ For each commit:
 
 ## Step 4 — Update CHANGELOG.md
 
-Append (or create if missing) an entry at the top under an `## Unreleased` heading. For each commit in this push, write:
+Insert (or create if missing) a new entry at the **top** of the file, immediately under the preamble — newest first. Each entry maps to a single plan in `plans/` and is versioned `v1`, `v2`, `v3`, ... in order. Determine the next version number by reading the existing CHANGELOG: if the latest entry is `## v3 — <plan-name>`, this push is `## v4 — <plan-name>`. The `<plan-name>` is the plan slug (e.g. `initial-e2e`, `eval-harness`).
+
+Write the entry **in first person, as if the user is writing it**, not as a third-person commit log. Don't list every commit; instead, structure the entry as:
 
 ```markdown
-### <type>: <summary>
+## v<n> — <plan-name>
 
-**What changed:** <1–3 sentences, focused on the search/retrieval impact when relevant.>
+Plan: [`plans/<plan-name>.md`](plans/<plan-name>.md).
 
-**Why:** <Motivation — the user-facing or architectural reason. Tie back to the spec or NOTES.md when it helps.>
+### What shipped
 
-**Agent prompts used:** <If the change came from a planned/executed feature, paste the key prompts (the `/plan` feature description and any task-level prompts that produced non-trivial code). Trim noise; keep the substance.>
+- <Tight bullets. One line each. User-facing or architectural impact, not file-by-file deltas.>
+
+### Architecture decisions
+
+- **<short headline>.** <Why it matters. 1–3 sentences max per bullet. Address the reviewer — focus on the *why* and the tradeoff, not the *what*.>
+
+### Out of scope (deferred by design)
+
+<One or two sentences listing what was intentionally not built in this slice.>
 ```
 
-When a release tag happens later, the user (not you) will rename `Unreleased` to a version. Don't do that automatically.
+Optional sections to include only when they add signal:
+
+- **Driving prompts** — paste 1–3 originating prompts (the feature description fed to `/plan`, or any user prompt that materially shaped the work). Trim noise; this is the audit trail the challenge brief asks for.
+- **Mid-flight fixes** — call out anything debugged after `/execute` finished, especially if it changed an architectural decision.
+
+Keep the audience in mind: a reviewer at the company who posted the challenge. They want to see the reasoning, the tradeoffs, and the prompts — not a verbose change log.
+
+The user (not you) renames `v<n>` to a release tag if/when they cut one. Don't do that automatically.
 
 ## Step 5 — Push
 
