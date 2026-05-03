@@ -1,0 +1,135 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  background: #fafafa;
+  color: #1a1a1a;
+}
+
+.page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+
+.page header h1 {
+  margin-bottom: 0.25rem;
+}
+
+.search-form {
+  display: grid;
+  gap: 1rem;
+  background: #fff;
+  padding: 1.5rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.95rem;
+}
+
+.field span {
+  font-weight: 600;
+}
+
+.field input,
+.field textarea {
+  font: inherit;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.field .hint {
+  color: #555;
+}
+
+button[type="submit"] {
+  font: inherit;
+  padding: 0.6rem 1rem;
+  background: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button[type="submit"]:disabled {
+  background: #999;
+  cursor: not-allowed;
+}
+
+.banner {
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.banner-error {
+  background: #ffe6e6;
+  border: 1px solid #f5a3a3;
+  color: #8b1a1a;
+}
+
+.banner-warning {
+  background: #fff4d6;
+  border: 1px solid #f0c97a;
+  color: #6b4f00;
+}
+
+.results {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.result-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.result-card h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1rem;
+}
+
+.result-card .meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: #555;
+  margin: 0 0 0.5rem;
+}
+
+.result-card .meta span {
+  background: #f1f1f1;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.result-card .description {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.empty {
+  color: #555;
+}
