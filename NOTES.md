@@ -3,6 +3,15 @@ This document contains my play by play notes as I worked through the code challe
 
 # 0. Project Understanding and Setup
 **Time spent:** 30 minutes
+**Agent prompts used:**
+```
+I'm working on a coding challenge from this public notion doc: https://first-chair.notion.site/AI-full-stack-programming-task-Image-Based-Product-Search-302c7d29276f80c395e6f97ebe7f9044
+
+Read the challenge and understand it thorouhgly. The role advertised is for senior AI engineer, so I think we should weigh it heavier on the AI side than the UX/UI and full stack side. What are your thoughts?
+```
+```
+Please explore the db and tell me what you find - fields, indexes, anything we can use to solve this challenge
+```
 
 Created the github repo, spent some time digging around notion and FirstChair's website to get acquainted with the challenge and the overarching product. My understanding:
 
@@ -84,3 +93,23 @@ Thinking of:
 * LLM rerank of top K results with the original image attached (increase quality)
 * Admin tab exposes - candidate strategy, K, filter strictness, attribute weights, rerank model, prompt templates
 
+# 1. AI tooling setup
+**Time spent:** 25 minutes
+**Prompts used:**
+```
+Read @NOTES.md and become acquainted with this project.
+
+Please crerate an AGENTS.md with architecture, software development principles, and any other non-functional requirements we have to build this project. It's important that the code structure be clear, organized, and easy to read. Other important principles are listed in NOTES.md.
+
+Please create three slash commands to help me:
+* `/plan` - as a senior architect and engineer, grill me about a feature, and write a plan with right-sized tasks and clear dependencies to be executed by parallel subagents. The plan should include an overal feature spec, all the tasks, a task dependency graph, and a parallel execution strategy. Each task should contain a prompt to be fed to subagents including entrypoints, instructions on what they need to build, and TDD instructions.
+* `/execute` - orchestrate subagents to execute the plan, and once all are done check to make sure the plan was actually completed
+* `/push-change` - propose a commit structure, commit, push, write to CHANGELOG.md
+```
+
+I'm going to keep it simple here, three simple commands
+* `/plan` - grill me about a feature, and write a plan with right-sized tasks and clear dependencies to be executed by parallel subagents
+* `/execute` - orchestrate subagents to execute the plan
+* `/push-change` - propose a commit structure, commit, push, write to CHANGELOG.md
+
+And a simple `AGENTS.md` file to capture the sprit/rules of how code should be written for this project. I had to refine the AGENTS.md file to include a repo layout and use docker compose up as the canonical run command, and also created a tiny README.md to start documenting the run instructions.
