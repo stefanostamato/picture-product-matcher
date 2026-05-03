@@ -113,3 +113,50 @@ I'm going to keep it simple here, three simple commands
 * `/push-change` - propose a commit structure, commit, push, write to CHANGELOG.md
 
 And a simple `AGENTS.md` file to capture the sprit/rules of how code should be written for this project. I had to refine the AGENTS.md file to include a repo layout and use docker compose up as the canonical run command, and also created a tiny README.md to start documenting the run instructions.
+
+# 2. Initial project setup (initial-e2e)
+**time spent:** 60 minutes
+
+Now it's time to start leveraging the AI tools we just setup. I gave AI these prompts:
+```
+I want to build an initial end-to-end version of this project. Read @NOTES.md for what we're trying to build. Can you tell me what you'd propose?
+```
+After some discussion we landed on a general direction:
+* Thinnest vertical pipeline (no rerank, no admin UI, no eval harness, no attribute weighted scoring, fancy filters)
+* Plumb a config object throuhg the backend for stuff we'll want to config later, so that we're not shooting ourselves in the foot here
+
+I then told the agent to `/plan` this and worked through the questions until we were ready to write the plan. Then I told the agent to `/execute` it.
+
+After the execute stage, I manually tested it with docker compose up and uploading a test image. Ran into some errors (CORS, node_modules volume mapping, lack of error logging in the backend). Worked with claude to fix these as I found them. In real projects I typically like to invest more in e2e test tooling to help agents find and fix errors themselves, but I decided not to prioritize that for this project given the time pressure.
+
+The /search endpoint started working quickly but it wasn't returning any results. I debugged it and found that the cateogry being returned by the LLM search was not an identical match to the DB categories - I replaced the freeform category it returns by an Enum pulled from the real DB.
+
+I then decided to /push-change this. I tweaked CHANGELOG a little bit and then pushed.
+
+# 3. Eval harness
+**time spent:** 60 minutes
+
+I started planning this during the implementation of the initial-e2e plan (~40 minutes after it had started). I'm thinking about how to build an evaluation harness - something lightweight that lets me judge how good the results from the search are. I first did this in an exploratory way with the following prompt:
+
+```
+I'm thinking of building a lightweight evaluation harness to help me gauge the quality of the search results returned. I have another agent running with the execution of @plans/initial-e2e.md - this will be executed after that is completed.
+
+Can you read @NOTES.md and propose a lightweight eval harness we could add here? I'm thinking:
+* Something that prints out eval results with every query ran - this should be easy for me to use during development, and for a reviewer to examine when testing out my submission.
+* Something that captures relevant metrics - recall, latency, cost (tokens and dollars)
+* Something that captures metrics based on different categories (i.e., matching the right category, type, stuff inferred from the description like colour, style, material, etc) so that the eval is useful to pinpoint where we're performing well and where further tuning is needed
+* Probably a lightweight "gold standard" eval set - maybe work backwards from real DB descriptions and use AI to generate images of stuff that matches categories, descriptions, etc.
+* Ideally we also generate a few manual testing items - these aren't used by eval but rather by me during manual testing, so that we can inspect for generalizability
+* Maybe even a lightweight history.json that tells us how model performance has evolved over time? This could be useful to show in the admin interface potentially, not sure - what are your thoughts?
+
+I want you to inspect the problem space, think about it criticaly, suggest metrics that would be relevant to capture, and suggest a lightweight eval harness that can accomplish these things. Simplicity is key, but it should be built with scale in mind - not just more data, but as the project grows and if we were to make adjustments to the search pipeline, etc.
+```
+
+
+# Future ideas
+* Eval of results so I can quantify & show improvements
+* Admin UI
+* LLM Rerank to improve quality of results
+* Attribute weighted scoring to improve quality of results
+* Filtering to improve performance
+* Add multiple AI providers
