@@ -146,6 +146,16 @@ async function main() {
         // field may not exist; skip
       }
     }
+
+    // Types per category — used by the vision prompt to constrain `type`.
+    const categories = await coll.distinct("category");
+    const typesByCategory = {};
+    for (const c of [...categories].sort()) {
+      const types = await coll.distinct("type", { category: c });
+      typesByCategory[c] = [...types].sort();
+    }
+    console.log("\n## Types by category (JSON)");
+    console.log(JSON.stringify(typesByCategory, null, 2));
   } finally {
     await client.close();
   }

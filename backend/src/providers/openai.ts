@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { PRODUCT_CATEGORIES } from "shared/catalog";
+import { PRODUCT_CATEGORIES, PRODUCT_TYPES } from "shared/catalog";
 import type { ExtractedAttributes } from "shared/wire";
 import {
   ProviderError,
@@ -23,7 +23,7 @@ const RESPONSE_SCHEMA = {
     properties: {
       unrecognized: { type: "boolean" },
       category: { type: "string", enum: [...PRODUCT_CATEGORIES] },
-      type: { type: "string" },
+      type: { type: "string", enum: [...PRODUCT_TYPES, ""] },
       style: { type: "string" },
       material: { type: "string" },
       color: { type: "string" },

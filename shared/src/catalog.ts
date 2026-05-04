@@ -52,3 +52,37 @@ export const PRODUCT_CATEGORIES = [
 ] as const;
 
 export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+
+// Closed list of `type` values per category, derived from the live catalog
+// via `scripts/explore-db.mjs`. 62 values total. Used as a constrained
+// vocabulary for vision extraction so the model can't invent type strings
+// the catalog doesn't have.
+export const PRODUCT_TYPES_BY_CATEGORY: Record<ProductCategory, readonly string[]> = {
+  Beds: ["Bunk Bed", "Canopy Bed", "Daybed", "Platform Bed", "Storage Bed"],
+  Benches: ["Dining Bench", "Entryway Bench", "Garden Bench", "Storage Bench"],
+  Bookshelves: ["Corner Bookshelf", "Ladder Shelf", "Tall Bookshelf", "Wide Bookshelf"],
+  Cabinets: ["Bar Cabinet", "Display Cabinet", "Filing Cabinet", "Storage Cabinet"],
+  Chairs: ["Accent Chair", "Armchair", "Dining Chair", "Recliner", "Rocking Chair"],
+  "Coffee Tables": [
+    "Lift-Top Coffee Table",
+    "Nesting Coffee Table",
+    "Rectangular Coffee Table",
+    "Round Coffee Table",
+  ],
+  Desks: ["Executive Desk", "L-Shaped Desk", "Standing Desk", "Writing Desk"],
+  Dressers: ["Double Dresser", "Tall Dresser", "Wide Dresser"],
+  Lighting: ["Chandelier", "Desk Lamp", "Floor Lamp", "Pendant Light", "Table Lamp"],
+  Nightstands: ["Open Shelf Nightstand", "Single Drawer Nightstand", "Two Drawer Nightstand"],
+  Ottomans: ["Bench Ottoman", "Pouf", "Storage Ottoman", "Tufted Ottoman"],
+  Sofas: ["Chesterfield Sofa", "Futon", "Loveseat", "Sectional Sofa", "Sleeper Sofa"],
+  "TV Stands": [
+    "Corner TV Stand",
+    "Entertainment Center",
+    "Floating TV Stand",
+    "Low Profile TV Stand",
+  ],
+  Tables: ["Console Table", "Dining Table", "Extendable Table", "Side Table"],
+  Wardrobes: ["Corner Wardrobe", "Hinged Door Wardrobe", "Open Wardrobe", "Sliding Door Wardrobe"],
+} as const;
+
+export const PRODUCT_TYPES = Object.values(PRODUCT_TYPES_BY_CATEGORY).flat();

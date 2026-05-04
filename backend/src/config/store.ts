@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { PRODUCT_CATEGORIES } from "shared/catalog";
+import { PRODUCT_CATEGORIES, PRODUCT_TYPES_BY_CATEGORY } from "shared/catalog";
 
 export type ProviderName = "openai";
 
@@ -18,12 +18,17 @@ export type Config = {
 
 const CATEGORY_LIST = PRODUCT_CATEGORIES.join(", ");
 
+const TYPES_BY_CATEGORY_LINES = PRODUCT_CATEGORIES.map(
+  (c) => `  - ${c}: ${PRODUCT_TYPES_BY_CATEGORY[c].join(", ")}`,
+).join("\n");
+
 export const DEFAULT_VISION_PROMPT = [
   "You analyze a product photo and extract attributes used to query a furniture catalog.",
   "Reply with a JSON object that matches the provided schema exactly.",
   "If the image is unreadable or contains no recognizable furniture/product, set `unrecognized` to true and leave the other fields empty.",
   "Otherwise, fill the fields you can infer and always include a one-sentence `description` suitable for a text search.",
   `The catalog has exactly these categories — pick the closest matching one for the \`category\` field: ${CATEGORY_LIST}.`,
+  `The \`type\` field must be one of the values listed for the chosen category below; if none fit, leave \`type\` empty rather than inventing one:\n${TYPES_BY_CATEGORY_LINES}`,
 ].join(" ");
 
 export const DEFAULT_RERANK_PROMPT = [
@@ -41,7 +46,7 @@ const defaults: Config = {
   visionPrompt: DEFAULT_VISION_PROMPT,
   rerankModel: "gpt-4o-mini",
   rerankPrompt: DEFAULT_RERANK_PROMPT,
-  rerankTopN: 10,
+  rerankTopN: 20,
 };
 
 const DEFAULT_FILE_PATH = path.resolve(process.cwd(), "data/config.json");

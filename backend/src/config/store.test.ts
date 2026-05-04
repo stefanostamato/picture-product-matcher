@@ -23,7 +23,7 @@ const DEFAULTS: Config = {
   visionPrompt: DEFAULT_VISION_PROMPT,
   rerankModel: "gpt-4o-mini",
   rerankPrompt: DEFAULT_RERANK_PROMPT,
-  rerankTopN: 10,
+  rerankTopN: 20,
 };
 
 describe("config store", () => {
@@ -52,10 +52,10 @@ describe("config store", () => {
     expect(getConfig().topK).toBe(20);
   });
 
-  it("default rerank is true and rerankTopN is 10", () => {
+  it("default rerank is true and rerankTopN is 20", () => {
     const config = getConfig();
     expect(config.rerank).toBe(true);
-    expect(config.rerankTopN).toBe(10);
+    expect(config.rerankTopN).toBe(20);
     expect(config.rerankModel).toBe("gpt-4o-mini");
     expect(config.rerankPrompt).toBe(DEFAULT_RERANK_PROMPT);
     expect(config.visionPrompt).toBe(DEFAULT_VISION_PROMPT);
