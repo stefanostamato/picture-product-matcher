@@ -152,9 +152,98 @@ Can you read @NOTES.md and propose a lightweight eval harness we could add here?
 I want you to inspect the problem space, think about it criticaly, suggest metrics that would be relevant to capture, and suggest a lightweight eval harness that can accomplish these things. Simplicity is key, but it should be built with scale in mind - not just more data, but as the project grows and if we were to make adjustments to the search pipeline, etc.
 ```
 
+I landed on an approach like this:
+* per-query diagnostic panel, gated on running the project with `npm run dev` (dev-only)
+    * Gives devs visibility over what's happening behind the scenes, helpful for fine tuning later
+    * Potentially not something we'd want to expose in prod, so I decided to gate it
+* Eval harness with `npm run dev`
+    * 30-item gold standard dataset (AI generated with a different model from the one used for search, to reduce bias)
+    * Runs each item through the pipeline, scores it, prints a per-category breakdown to stdout, appends to a history file so I can track progress
+* Metrics
+    * recall (@1/5/20), MRR, categoryHit, typeHit, attributeOverlap (Jaccard), p50/p95 latency per stage, total tokens, total $, failure-mode counts
+    * reported overall as well as broken down by category
+
+A couple key decisions to highlight:
+* Splitting dev diag panel from actual eval - eval needs a gold set, dev diag needs to run on each actual request (no gold standard to compare against). They serve different purposes, but are both helpful for iterating on the pipeline.
+* Implemented pricing capturing in providers, not eval - because I wanted to see the pricing on the dev diag panel and evals, it didn't make sense for this to be owned by another layer. Also different providers may implement pricing info in a different way, so this also nudged me to implement this at this layer.
+* AI generated gold set - in reality I'd spend a lot more time fine tuning this by hand, but given the time pressure I decided to leverage AI heavily here. I picked my test items from the DB (see note below) and generated AI images based on those descriptions. Theoretically running the pipeline based on those images should retrieve those items.
+* Different models for gold set generation and pipeline - gpt-image-1 was used to generate these images, gpt-4o-mini was used to extract attributes from the DB description. The pipeline itself uses gpt-4o-mini - I wanted to use a different model for the image generation to minimize circularity somewhat. This was the simplest, quickest approach I landed on for this test. It won't fully solve it, so I'm also hand-picking 10 images from the internet to manually test with real data.
+* Test item selection from DB - I explicitly chose to get 2 different types per category, rather than go for random. Did this to cover more of the search space while keeping the eval lightweight.
+* No precision/F1/NDCG scores - The eval has one true positive per query, so these metrics would add more noise than value at this stage. Decided to skip them. 
+* Creating a lightweight history - Added a jsonl file as an append-only history of eval runs with a snapshot of the config + git sha per row. The pipeline config will be mutable at runtime eventually, so capturing it in the history was important to make rows comparable long-term. Git SHA per row pins the code, plus goldSetVersion pins the fixtures so that we can safely extend the gold standard set later without making prior history useless. This will also be handy for the admin UI later.
+* Eval runner consumes the `runPipeline` directly - it's just another caller, so that we're testing exactly what we use in production. This also lets us evolve the pipeline cleanly without having to touch eval.
+
+The first eval results:
+```
+=== Eval results (overall) ===
+n              30
+recall@1       0.033
+recall@5       0.367
+recall@20      0.600
+mrr            0.179
+category-hit   0.933
+type-hit       0.333
+attr-overlap   0.142
+p50 latency    3285 ms
+p95 latency    19834 ms
+tokens (total) 776555
+cost           $0.11736
+failures       missing=12 categoryMiss=2 typeMiss=20
+
+=== By category ===
+category        n   r@1    r@5    r@20   mrr    attr   $         
+Beds            2   0.000  0.000  0.500  0.050  0.000  $0.00783  
+Benches         2   0.000  0.000  1.000  0.104  0.000  $0.00783  
+Bookshelves     2   0.000  1.000  1.000  0.225  0.100  $0.00783  
+Cabinets        2   0.000  0.000  0.500  0.063  0.100  $0.00783  
+Chairs          2   0.000  0.000  0.500  0.083  0.000  $0.00783  
+Coffee Tables   2   0.000  0.000  0.000  0.000  0.000  $0.00782  
+Desks           2   0.000  0.000  0.000  0.000  0.250  $0.00782  
+Dressers        2   0.000  0.000  0.000  0.000  0.000  $0.00782  
+Lighting        2   0.000  1.000  1.000  0.417  0.250  $0.00782  
+Nightstands     2   0.000  0.500  1.000  0.222  0.200  $0.00782  
+Ottomans        2   0.000  0.500  0.500  0.125  0.350  $0.00782  
+Sofas           2   0.500  1.000  1.000  0.600  0.333  $0.00781  
+TV Stands       2   0.000  0.500  0.500  0.250  0.350  $0.00782  
+Tables          2   0.000  0.500  1.000  0.292  0.100  $0.00783  
+Wardrobes       2   0.000  0.500  0.500  0.250  0.100  $0.00782  
+
+```
+* This tells me we're hitting the right category but matching the wrong type
+* This also points to the LLM rerank as potentially very impactful
+
+# 4. Admin UI + LLM rerank
+**Full disclosure:** I completed this part after the 4 hour limit. The eval test set generation took a lot longer than anticipated, and I was already halfay done. I decided to keep pushing as the eval allowed me to have deep insights that would be very helpful, but in hindsight I would have tried to simplify this a lot more.
+Started planning this while the eval harness was being built. I used this prompt to get started:
+```
+I have a separate agent building @plans/eval-harness.md 
+
+I now want to start thinking about the Admin UI. Can you read @NOTES.md to analyze the problem, requirements, think critically about them, and suggest what we should build?
+```
+
+While the AI was running, I referred back to the challenge in Notion to think independently about what this needs. I noted down:
+* internal, back-office interface (not public) - needs simple gating
+* needs to allow configuring the product matching functionality
+
+From my own thinking I also want:
+* An overview of the search pipeline, so admins understand at a glance how it works and what knobs might do
+* Rendering of history.jsonl
+
+I then decided to /plan this feature.
+
+Tradeoffs/decisions:
+* Simple admin password: instead of implementing full on auth, I decided to keep it super simple. .env defines `ADMIN_PASSWORD`. Frontend keeps the password in sessionStorage, sends x-admin-password as a header on every admin call. Backend middleware compares it to .env. Very rudimentary, I would never do this for an actual product. But I made a judgement call to focus more on the retrieval piece than hardening for this challenge, especially considering the time pressure. It still felt important to me to add some form of protection to the admin stuff as it was specifically mentioned this was a non-public interface.
+
+Because the test dataset for the eval harness was taking a while to reload, I decided to add to the scope of this iteration the addition of an LLM rerank step to improve the quality of search results. The idea is that we get results back, and instead of showing them to the user directly, we first show it to an LLM who's responsible for recalibrating the results so that they're more relevant. Some tradeoffs I considered:
+* Higher cost - I decided to build this anyway even if it does add more cost to each run, because it's an admin-gated change. Admins can always disable if I realize it's bad or costing too much.
+* Latency - this will add another couple seconds to the search time. It's not ideal, and there would be other refinements that don't add this (e.g., running a jaccard similarity locally on the attributes and reranking based on that). In this case I decided to prioritize quality over latency - my gut says this whole project is about image -> text results so doing the refinement based on the image directly feels like the most promising path to increase quality.
+* Should the rerank remove results or just shuffle them around? I decided just shuffle (re-order) them for now. Didn't want to remove search results as I feel sometimes people shopping around like to see more options. I think there's a balance here (thinking of UX principles where choice creats doubt which reduces action) but I decided to air on the side of more for the time being.
+
+# 5. README refactor
+As time was coming to a close, I decided to refactor the README to match the challenge instructions.
+
 
 # Future ideas
-* Eval of results so I can quantify & show improvements
 * Admin UI
 * LLM Rerank to improve quality of results
 * Attribute weighted scoring to improve quality of results
