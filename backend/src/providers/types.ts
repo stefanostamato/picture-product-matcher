@@ -11,6 +11,12 @@ export interface ExtractFromImageInput {
   apiKey: string;
   /** The vision model identifier, e.g. "gpt-4o-mini". Provider-specific. */
   model: string;
+  /**
+   * The system prompt the provider sends as the first message. The pipeline
+   * sources this from `Config.visionPrompt` so admins can tune it at runtime;
+   * adapters use it verbatim and ship no internal default.
+   */
+  systemPrompt: string;
 }
 
 /**
@@ -37,12 +43,42 @@ export interface ExtractFromImageResult {
 }
 
 /**
+ * Inputs the rerank stage hands to a provider's `rerankWithImage` call. The
+ * provider is given the image, the user-tunable system prompt, and a flat
+ * candidate list (id + minimal text). The adapter is responsible for
+ * serializing the candidates into the user message; it must NOT validate that
+ * returned ids match the input set — that defensive concern lives in the
+ * pipeline so the adapter stays a thin transport.
+ */
+export interface RerankWithImageInput {
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+  image: Buffer;
+  mimeType: string;
+  candidates: Array<{ id: string; title: string; description: string }>;
+}
+
+/**
+ * Result envelope returned by `rerankWithImage`. `orderedIds` is whatever the
+ * model produced — verbatim, no filtering. The pipeline is responsible for
+ * validating it as a permutation of the input ids and falling back on
+ * mismatch. `usage` flows into the same token/cost aggregation path as
+ * `extractFromImage` so the search response reports total cost across stages.
+ */
+export interface RerankWithImageResult {
+  orderedIds: string[];
+  usage: ProviderUsage;
+}
+
+/**
  * The single seam every model provider implements. Adding a new adapter is one
  * new file that exports an object satisfying this interface.
  */
 export interface Provider {
   readonly name: string;
   extractFromImage(input: ExtractFromImageInput): Promise<ExtractFromImageResult>;
+  rerankWithImage(input: RerankWithImageInput): Promise<RerankWithImageResult>;
 }
 
 /**

@@ -13,6 +13,7 @@ function fakeProvider(
   return {
     name: "fake",
     extractFromImage: vi.fn(fn) as Provider["extractFromImage"],
+    rerankWithImage: vi.fn() as Provider["rerankWithImage"],
   };
 }
 
@@ -35,7 +36,11 @@ describe("visionExtract stage", () => {
         prompt: "rustic feel",
         apiKey: "sk-test",
       },
-      { provider, visionModel: "gpt-4o-mini" },
+      {
+        provider,
+        visionModel: "gpt-4o-mini",
+        visionPrompt: "fixture-prompt",
+      },
     );
 
     expect(result).toEqual(expected);
@@ -51,6 +56,7 @@ describe("visionExtract stage", () => {
       userPrompt: "rustic feel",
       apiKey: "sk-test",
       model: "gpt-4o-mini",
+      systemPrompt: "fixture-prompt",
     });
   });
 
@@ -62,13 +68,30 @@ describe("visionExtract stage", () => {
 
     await visionExtract(
       { image: TINY_PNG, mimeType: "image/jpeg", apiKey: "k" },
-      { provider, visionModel: "gpt-4o" },
+      { provider, visionModel: "gpt-4o", visionPrompt: "fixture-prompt" },
     );
 
     const arg = (provider.extractFromImage as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(arg.userPrompt).toBeUndefined();
     expect(arg.model).toBe("gpt-4o");
+    expect(arg.systemPrompt).toBe("fixture-prompt");
+  });
+
+  it("forwards visionPrompt from deps to the provider as systemPrompt", async () => {
+    const provider = fakeProvider(async () => ({
+      extracted: { description: "y" },
+      usage: { promptTokens: 0, completionTokens: 0, model: "m" },
+    }));
+
+    await visionExtract(
+      { image: TINY_PNG, mimeType: "image/png", apiKey: "k" },
+      { provider, visionModel: "m", visionPrompt: "fixture-prompt" },
+    );
+
+    const arg = (provider.extractFromImage as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
+    expect(arg.systemPrompt).toBe("fixture-prompt");
   });
 
   it("propagates ProviderError thrown by the provider", async () => {
@@ -82,7 +105,7 @@ describe("visionExtract stage", () => {
     await expect(
       visionExtract(
         { image: TINY_PNG, mimeType: "image/png", apiKey: "k" },
-        { provider, visionModel: "m" },
+        { provider, visionModel: "m", visionPrompt: "fixture-prompt" },
       ),
     ).rejects.toBeInstanceOf(ProviderError);
   });

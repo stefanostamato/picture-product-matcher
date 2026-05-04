@@ -6,22 +6,14 @@ import {
   type ExtractFromImageInput,
   type ExtractFromImageResult,
   type Provider,
+  type RerankWithImageInput,
+  type RerankWithImageResult,
 } from "./types.js";
 
 // The model signals "I cannot match this image" by setting `unrecognized: true`
 // in the structured JSON response; the adapter converts that into a typed
 // ProviderError so the pipeline can surface a graceful error to the user.
 const UNRECOGNIZED_FLAG = "unrecognized";
-
-const CATEGORY_LIST = PRODUCT_CATEGORIES.join(", ");
-
-const SYSTEM_PROMPT = [
-  "You analyze a product photo and extract attributes used to query a furniture catalog.",
-  "Reply with a JSON object that matches the provided schema exactly.",
-  "If the image is unreadable or contains no recognizable furniture/product, set `unrecognized` to true and leave the other fields empty.",
-  "Otherwise, fill the fields you can infer and always include a one-sentence `description` suitable for a text search.",
-  `The catalog has exactly these categories — pick the closest matching one for the \`category\` field: ${CATEGORY_LIST}.`,
-].join(" ");
 
 const RESPONSE_SCHEMA = {
   name: "extracted_attributes",
@@ -119,7 +111,7 @@ async function extractFromImage(
     completion = (await client.chat.completions.create({
       model: input.model,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: input.systemPrompt },
         { role: "user", content: buildUserContent(input) },
       ],
       response_format: { type: "json_schema", json_schema: RESPONSE_SCHEMA },
@@ -177,7 +169,105 @@ async function extractFromImage(
   return { extracted: toExtracted(parsed), usage };
 }
 
+const RERANK_RESPONSE_SCHEMA = {
+  name: "rerank_result",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      orderedIds: {
+        type: "array",
+        items: { type: "string" },
+      },
+    },
+    required: ["orderedIds"],
+  },
+  strict: false,
+} as const;
+
+function buildRerankUserContent(input: RerankWithImageInput) {
+  const dataUrl = `data:${input.mimeType};base64,${input.image.toString("base64")}`;
+  const candidatesJson = JSON.stringify(input.candidates);
+  const promptText = `Rerank these candidates from most to least visually relevant to the image. Candidates: ${candidatesJson}`;
+  return [
+    { type: "text" as const, text: promptText },
+    { type: "image_url" as const, image_url: { url: dataUrl } },
+  ];
+}
+
+interface RawRerank {
+  orderedIds?: unknown;
+}
+
+async function rerankWithImage(
+  input: RerankWithImageInput,
+): Promise<RerankWithImageResult> {
+  const client = new OpenAI({
+    apiKey: input.apiKey,
+    maxRetries: SDK_MAX_RETRIES,
+  });
+
+  let completion: RawCompletion;
+  try {
+    completion = (await client.chat.completions.create({
+      model: input.model,
+      messages: [
+        { role: "system", content: input.systemPrompt },
+        { role: "user", content: buildRerankUserContent(input) },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: RERANK_RESPONSE_SCHEMA,
+      },
+    })) as RawCompletion;
+  } catch (err) {
+    const upstream = err as { status?: number; code?: string };
+    const upstreamStatus =
+      typeof upstream?.status === "number" ? upstream.status : undefined;
+    const upstreamCode =
+      typeof upstream?.code === "string" ? upstream.code : undefined;
+    throw new ProviderError({
+      code: "PROVIDER_HTTP_ERROR",
+      message: "The model provider rejected the request.",
+      upstreamStatus,
+      upstreamCode,
+    });
+  }
+
+  const content = completion.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || content.length === 0) {
+    throw new ProviderError({
+      code: "INVALID_RESPONSE",
+      message: "The model returned an empty response.",
+    });
+  }
+
+  let parsed: RawRerank;
+  try {
+    parsed = JSON.parse(content) as RawRerank;
+  } catch {
+    throw new ProviderError({
+      code: "INVALID_RESPONSE",
+      message: "The model response was not valid JSON.",
+    });
+  }
+
+  // Adapter returns ids verbatim; the pipeline validates the set.
+  const orderedIds = Array.isArray(parsed.orderedIds)
+    ? (parsed.orderedIds as unknown[]).map((id) => String(id))
+    : [];
+
+  const usage = {
+    promptTokens: completion.usage?.prompt_tokens ?? 0,
+    completionTokens: completion.usage?.completion_tokens ?? 0,
+    model: input.model,
+  };
+
+  return { orderedIds, usage };
+}
+
 export const openAIProvider: Provider = {
   name: "openai",
   extractFromImage,
+  rerankWithImage,
 };

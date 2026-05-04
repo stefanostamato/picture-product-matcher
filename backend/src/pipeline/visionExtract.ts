@@ -11,6 +11,7 @@ export interface VisionExtractInput {
 export interface VisionExtractDeps {
   provider: Provider;
   visionModel: string;
+  visionPrompt: string;
 }
 
 // Thin adapter from the pipeline's named input shape to the provider's
@@ -25,6 +26,7 @@ export async function visionExtract(
     mimeType: input.mimeType,
     apiKey: input.apiKey,
     model: deps.visionModel,
+    systemPrompt: deps.visionPrompt,
     ...(input.prompt !== undefined ? { userPrompt: input.prompt } : {}),
   });
 }
