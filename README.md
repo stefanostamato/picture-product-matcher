@@ -51,7 +51,7 @@ shape is [backend/src/pipeline/run.ts](backend/src/pipeline/run.ts).
   → vision-extract   → { category, type, style, material, color, description, ... }
   → query-build      → text query + hard category filter
   → catalog-search   → top-K candidates from Mongo $text index
-  → rerank (stub)    → behind admin flag, currently passthrough
+  → rerank           → takes N top candidates & reranks them with vision LLM
   → response         → ranked products + diag metadata
 ```
 
@@ -82,10 +82,11 @@ retrieval strategy is built around what the index actually exposes:
   `{ $meta: "textScore" }` is good enough as a baseline given the weighted
   index; `topK` is admin-tunable (default 20).
   ([backend/src/catalog/search.ts](backend/src/catalog/search.ts))
-- **Rerank seam, stub today.** The pipeline has a `rerank` stage behind a
-  config flag. The intent is to feed the top-K back to a vision LLM with
-  the original image and re-order based on visual fit; the seam ships
-  empty so wiring it on later is a flag flip.
+- **Rerank with the original image, on by default.** The top `rerankTopN`
+  results from the top-K (kept as separate knobs for fine-tuning) are sent
+  back to a vision LLM along with the original image, which re-orders them
+  by visual fit. Reorder-only — the stage never drops or adds candidates,
+  so the long tail of the result list stays browsable.
   ([backend/src/pipeline/rerank.ts](backend/src/pipeline/rerank.ts))
 
 ### Key design choices and tradeoffs
@@ -123,29 +124,42 @@ retrieval strategy is built around what the index actually exposes:
 
 In rough priority order, what I'd build next:
 
-1. **Land the LLM rerank.** The seam is in place; the missing piece is a
-   vision-LLM call that takes top-K candidates plus the original image
-   and re-orders them. Highest expected lift on result quality and
-   already admin-flagged.
-2. **Admin UI.** Plan exists at [plans/admin-ui.md](plans/admin-ui.md):
-   simple password-gated page that exposes the in-memory config (top-K,
-   rerank, model), shows a pipeline diagram, and renders the eval
-   `history.jsonl` for tracking quality across config changes.
-3. **Attribute-weighted scoring.** Layer a local re-rank that boosts hits
-   matching extracted attributes (style, material, color) before — or
-   instead of — the LLM rerank. Cheaper than an LLM call, narrower lift.
-4. **Filter strictness as a knob.** Today category is a hard filter and
-   everything else is soft. An admin-tunable strictness (e.g. add `type`
-   as a hard filter when confidence is high) would help precision on
-   queries the vision model nails.
-5. **Pluggable providers beyond OpenAI.** The provider interface is
+1. **Push K and rerank-N higher.** The latest eval shows rerank lifting
+   MRR but trailing the no-rerank baseline on recall@5/@20 — likely
+   because rerank can only reorder the window the catalog stage already
+   returned. Widening both `topK` and `rerankTopN` is the cheapest
+   experiment to test whether rerank can earn its keep on recall.
+2. **Fine-tune the rerank prompt.** The current prompt is the minimum
+   viable instruction. Iterating on it (and possibly model size) is the
+   next lever once the window-size question is answered.
+3. **Split the type identifier into its own stage.** `category` and
+   `type` are doing different jobs — category is a hard filter, type is
+   a soft signal — but they share one vision call today. A dedicated
+   type-classification step (smaller model, narrower prompt) would let
+   each be tuned independently.
+4. **Per-stage model-size tuning.** Vision-extract and rerank both use
+   `gpt-4o-mini` today. Some stages probably want a smaller/cheaper
+   model; others might justify a larger one. The eval harness already
+   gives us the dial to test this honestly.
+5. **Perceptual-hash prefilter or fallback.** Downscale each catalog
+   image to a fixed size, hash the pixel values (pHash/dHash/wHash),
+   and find visually similar products in one deterministic op. Only
+   works if the catalog grows image URLs (or the ingest pipeline can
+   compute hashes from product photos). Even as a complementary layer
+   rather than a replacement, it would help with the latency wall the
+   LLM stages are running into.
+6. **Attribute-weighted scoring.** Layer a local re-rank that boosts
+   hits matching extracted attributes (style, material, color) before —
+   or instead of — the LLM rerank. Cheaper than an LLM call, narrower
+   lift.
+7. **Filter strictness as a knob.** Today category is a hard filter and
+   everything else is soft. An admin-tunable strictness (e.g. add
+   `type` as a hard filter when confidence is high) would help
+   precision on queries the vision model nails.
+8. **Pluggable providers beyond OpenAI.** The provider interface is
    already abstract; adding Anthropic / Gemini is mostly an adapter and
    pricing entry. Useful for cost/quality A/B and for users who don't
    have an OpenAI key.
-6. **Real per-document scores.** `catalogSearch` synthesizes a positional
-   score for the diag panel because the query layer doesn't yet thread
-   `textScore` through to the response. Wire it through and the diag
-   panel and eval get a real signal to track.
 
 ---
 
