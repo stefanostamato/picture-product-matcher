@@ -133,3 +133,146 @@ button[type="submit"]:disabled {
 .empty {
   color: #555;
 }
+
+.admin-page .admin-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.admin-logout {
+  font: inherit;
+  padding: 0.35rem 0.75rem;
+  background: #fff;
+  color: #333;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.admin-section {
+  margin-bottom: 2rem;
+}
+
+.admin-section h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.admin-config-form {
+  display: grid;
+  gap: 1rem;
+  background: #fff;
+  padding: 1.25rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+}
+
+.admin-fieldset {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.admin-fieldset legend {
+  font-weight: 600;
+  padding: 0 0.4rem;
+}
+
+.admin-fieldset .field-checkbox {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.admin-fieldset textarea {
+  min-height: 6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+}
+
+.admin-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.admin-reset {
+  font: inherit;
+  padding: 0.6rem 1rem;
+  background: #fff;
+  color: #8b1a1a;
+  border: 1px solid #e0a3a3;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.admin-reset:disabled,
+.admin-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.admin-status {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.admin-status-ok {
+  color: #1a6b2e;
+}
+
+.admin-status-error {
+  color: #8b1a1a;
+}
+
+.admin-history-empty {
+  color: #555;
+  background: #fff;
+  border: 1px dashed #c8c8c8;
+  padding: 1rem;
+  border-radius: 6px;
+}
+
+.admin-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+  font-size: 0.9rem;
+}
+
+.admin-history-table th,
+.admin-history-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #eee;
+}
+
+.admin-history-table th {
+  background: #f6f6f6;
+  font-weight: 600;
+}
+
+.admin-history-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-login {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 320px;
+  background: #fff;
+  padding: 1.25rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+}
