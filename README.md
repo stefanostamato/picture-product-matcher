@@ -163,6 +163,19 @@ cd backend && npm install && npm run dev
 cd frontend && npm install && npm run dev
 ```
 
+### Admin UI
+
+Visit `http://localhost:5173/admin` and sign in with the admin password
+(env `ADMIN_PASSWORD` on the backend, default `admin`). The page exposes
+the live `Config`: **Top K** (catalog hits returned), **Vision model /
+prompt** (image-extraction stage), **Rerank** (toggles the LLM rerank
+stage — **on by default**, so each search costs an extra LLM call and
+cost roughly doubles), and **Rerank model / prompt / top N** (which
+model reorders how many of the top hits). Saves persist to
+`backend/data/config.json` (gitignored) and survive restart; **Reset to
+defaults** clears that file. The history table below the form lists
+rows from `backend/eval/history.jsonl`, newest first.
+
 ### Diagnostic panel (dev only)
 
 When the frontend is running under Vite dev mode (`npm run dev` or

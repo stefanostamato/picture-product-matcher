@@ -210,10 +210,16 @@ Wardrobes       2   0.000  0.500  0.500  0.250  0.100  $0.00782
 
 ```
 * This tells me we're hitting the right category but matching the wrong type
-* This also points to the LLM rerank as potentially very impactful
+* This also points to the LLM rerank as potentially very impactful - I'm gonna keep prioritizing that given time crunch & plans already built. But there are lower hanging fruit I'd consider.
+    * We're getting the right result in the top 20 frequently, but we rarely pick it as the top result - I'm hoping LLM rerank will help with this.
+* Another thing I'm not doing but maybe should is to treat type as an ENUM (similar to what I'm doing for categories - works well there, maybe would help here)
 
-# 4. Admin UI + LLM rerank
+# 4. README refactor
+As time was coming to a close, I decided to refactor the README to match the challenge instructions.
+
+# 5. Admin UI + LLM rerank
 **Full disclosure:** I completed this part after the 4 hour limit. The eval test set generation took a lot longer than anticipated, and I was already halfay done. I decided to keep pushing as the eval allowed me to have deep insights that would be very helpful, but in hindsight I would have tried to simplify this a lot more.
+
 Started planning this while the eval harness was being built. I used this prompt to get started:
 ```
 I have a separate agent building @plans/eval-harness.md 
@@ -239,13 +245,14 @@ Because the test dataset for the eval harness was taking a while to reload, I de
 * Latency - this will add another couple seconds to the search time. It's not ideal, and there would be other refinements that don't add this (e.g., running a jaccard similarity locally on the attributes and reranking based on that). In this case I decided to prioritize quality over latency - my gut says this whole project is about image -> text results so doing the refinement based on the image directly feels like the most promising path to increase quality.
 * Should the rerank remove results or just shuffle them around? I decided just shuffle (re-order) them for now. Didn't want to remove search results as I feel sometimes people shopping around like to see more options. I think there's a balance here (thinking of UX principles where choice creats doubt which reduces action) but I decided to air on the side of more for the time being.
 
-# 5. README refactor
-As time was coming to a close, I decided to refactor the README to match the challenge instructions.
+After building this, I manually tested a few things:
+* manually tested the retrieval
+* manually tested the admin and adjusting knobs
+* all seems to be working pretty well!
 
+I decided to push these changes.
 
 # Future ideas
-* Admin UI
-* LLM Rerank to improve quality of results
 * Attribute weighted scoring to improve quality of results
 * Filtering to improve performance
 * Add multiple AI providers
