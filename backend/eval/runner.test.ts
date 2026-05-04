@@ -3,6 +3,21 @@ import type { Product } from "shared/catalog";
 import type { SearchResponse } from "shared/wire";
 import { runEval, type RunEvalDeps, type RunPipelineFn } from "./runner.js";
 import type { GoldItem } from "./types.js";
+import {
+  DEFAULT_VISION_PROMPT,
+  DEFAULT_RERANK_PROMPT,
+} from "../src/config/store.js";
+
+const baseConfig = {
+  topK: 20,
+  rerank: false,
+  provider: "openai" as const,
+  visionModel: "gpt-4o-mini",
+  visionPrompt: DEFAULT_VISION_PROMPT,
+  rerankModel: "gpt-4o-mini",
+  rerankPrompt: DEFAULT_RERANK_PROMPT,
+  rerankTopN: 10,
+};
 
 const product = (id: string, overrides: Partial<Product> = {}): Product => ({
   _id: id,
@@ -85,12 +100,7 @@ describe("runEval", () => {
       );
     });
 
-    const getConfig = vi.fn(() => ({
-      topK: 20,
-      rerank: false,
-      provider: "openai" as const,
-      visionModel: "gpt-4o-mini",
-    }));
+    const getConfig = vi.fn(() => baseConfig);
 
     const deps: RunEvalDeps = {
       runPipeline,
@@ -127,12 +137,7 @@ describe("runEval", () => {
         successResponse([product(item.productId)], item.category, item.type),
     );
 
-    const getConfig = vi.fn(() => ({
-      topK: 20,
-      rerank: false,
-      provider: "openai" as const,
-      visionModel: "gpt-4o-mini",
-    }));
+    const getConfig = vi.fn(() => baseConfig);
 
     await runEval({
       runPipeline,
@@ -153,12 +158,7 @@ describe("runEval", () => {
     const report = await runEval({
       runPipeline: vi.fn(),
       loadGold: vi.fn(async () => []),
-      getConfig: vi.fn(() => ({
-        topK: 20,
-        rerank: false,
-        provider: "openai" as const,
-        visionModel: "gpt-4o-mini",
-      })),
+      getConfig: vi.fn(() => baseConfig),
       apiKey: "k",
     });
 
