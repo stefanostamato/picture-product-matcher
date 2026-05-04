@@ -5,6 +5,129 @@ sized task graphs the `/plan` command produced from a feature
 description; the `/execute` command then fans them out across parallel
 subagents. `NOTES.md` has the play-by-play and the originating prompts.
 
+## v3 — admin-ui
+
+Plan: [`plans/admin-ui.md`](plans/admin-ui.md).
+
+### What shipped
+
+- A real LLM rerank stage, **on by default**. Top-N catalog hits are
+  sent back to a vision model (image attached + minimal candidate
+  JSON) and reordered by visual relevance to the upload. The rest of
+  the result list is passed through untouched. Provider usage rolls
+  up into the existing `meta.tokens` / `meta.costUsd` so the diag
+  panel and the eval harness pick it up for free.
+- An `/admin` route gated by a single static `ADMIN_PASSWORD`
+  (default `"admin"`). After login, an admin can edit every knob in
+  `Config` — `topK`, `visionModel`, `visionPrompt`, `rerank`,
+  `rerankModel`, `rerankPrompt`, `rerankTopN` — Save persists, Reset
+  clears the on-disk file. A history table below renders rows from
+  `backend/eval/history.jsonl` (timestamp, gitSha, recall@5, MRR, p95
+  latency, $).
+- File-backed config store. The in-memory `Config` is now mirrored to
+  `backend/data/config.json` (atomic tmp+rename, lazy bootstrap,
+  corrupt-file fallback to defaults with a warning). Edits survive
+  restart; the file is gitignored.
+- Backend admin surface: `GET /admin/config`, `POST /admin/config`,
+  `POST /admin/config/reset`, `GET /admin/history` — all gated by a
+  `requireAdminPassword` middleware that uses a constant-time compare
+  and never echoes the supplied password back.
+- Vision system prompt is now sourced from `Config.visionPrompt` and
+  threaded through `visionExtract` into the provider. The hardcoded
+  `SYSTEM_PROMPT` literal is gone from the OpenAI adapter.
+
+### Architecture decisions
+
+- **Reorder-only rerank, never truncate.** Some shoppers want the
+  long tail; removing candidates at this stage closes off "browse
+  around" UX without recouping much accuracy. The pipeline enforces
+  a permutation invariant on the returned ids — a non-permutation
+  falls back to catalog order rather than crashing or silently
+  reshuffling.
+- **Defensive id check lives in the pipeline, not the adapter.** The
+  OpenAI adapter returns whatever ids the model produced verbatim and
+  reports usage. The pipeline owns "is this a valid permutation of
+  what I sent?" because that's where the catalog products live and
+  where fallback semantics belong. Keeps adapters thin and testable.
+- **Rerank usage flows into the existing usage array.** Rather than
+  introducing a parallel "rerank cost" surface, the orchestrator
+  pushes rerank's `ProviderUsage` into the same `usages` array vision
+  contributes to. `sumTokens`/`sumCost` were already aggregating from
+  there, so the diag panel and eval harness picked up rerank-aware
+  cost with zero extra plumbing.
+- **Rerank on by default, with the cost note in the README.** The
+  whole project is image → catalog match; doing the final ranking
+  with the image attached is the most promising signal. The admin can
+  flip it off if the spend doesn't pencil out.
+- **One static admin password, sessionStorage on the client.** Real
+  auth (sessions, OAuth, multi-user) was deliberately out of scope
+  for the time-boxed scope. The brief required the admin surface to
+  be non-public; a static header check is the smallest thing that
+  delivers that. `sessionStorage` (not `localStorage`) so the
+  password evaporates with the tab — same posture as the public
+  surface's API key.
+- **Constant-time compare + length pre-check.** `timingSafeEqual`
+  throws on length mismatch (which itself is a side channel via the
+  throw vs. compare branch), so the middleware short-circuits on
+  length first and only then runs the compare. Empty-string env is
+  treated as "unset" so a stray `ADMIN_PASSWORD=` line in `.env`
+  doesn't silently disable the gate.
+- **Config persisted as JSON, written atomically.** `tmp + rename`
+  means a crashed write never leaves a half-file behind. Boot is
+  best-effort: missing file → defaults with no write; corrupt file or
+  failed validation → warn + defaults, don't refuse to start.
+- **Vision/rerank prompts as `Config` knobs.** Both prompts are
+  string fields with bounded validation (≤ 2000 chars) so an admin
+  can A/B prompt wording without a redeploy. The defaults live in
+  `config/store.ts` as exported constants the eval harness pins
+  against, and the OpenAI adapter ships no internal default — the
+  pipeline must always supply one.
+- **Wire types in `shared/`, not reaching across packages.** The
+  frontend admin table consumes `HistoryRow` from `shared/wire.ts`
+  rather than importing from `backend/eval/types.ts`. Same posture
+  as the public search response — frontend and backend agree at the
+  wire boundary, not at the implementation boundary.
+
+### Out of scope (deferred by design)
+
+Real auth (sessions, OAuth, multi-user), audit log of who changed
+what, charts over `history.jsonl`, triggering eval runs from the UI,
+exposing the `provider` knob (one provider today), per-result
+rationale strings out of rerank, cost ceilings or auto-disable on
+spend, and rerank that **drops** candidates. The next likely lift is
+treating `type` as a closed enum the way `category` already is — the
+eval shows we hit the right category but mis-pick the type.
+
+### Driving prompts
+
+The originating ask, lightly trimmed:
+
+> I have a separate agent building @plans/eval-harness.md.
+>
+> I now want to start thinking about the Admin UI. Can you read
+> @NOTES.md to analyze the problem, requirements, think critically
+> about them, and suggest what we should build?
+
+Mid-flight scope expansion: while the eval-harness fixture set was
+slow to regenerate, I added the LLM rerank stage to this slice. The
+eval had already shown us hitting the right category but rarely
+picking the correct top-1 result, which made rerank the highest-
+expected-lift item and a natural companion to the admin knobs that
+control it.
+
+### Mid-flight fixes
+
+- Default `rerank` flipped from `false` to `true` in `Config`. The
+  eval-harness `runner.test.ts` was already pinning `rerank: false`
+  explicitly so the metrics-snapshot tests didn't drift; no further
+  test changes needed for that flip.
+- `setConfig` is now async (it persists to disk), so the admin route
+  awaits it. The pipeline never calls `setConfig`, so no pipeline
+  test changes were needed.
+- `registerAdminRoutes` mounts its own `express.json()` body parser
+  scoped to admin routes only, so the public `/search` multipart
+  handler keeps its raw-body behavior.
+
 ## v2 — eval-harness
 
 Plan: [`plans/eval-harness.md`](plans/eval-harness.md).
