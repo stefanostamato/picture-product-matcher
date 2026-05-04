@@ -4,7 +4,14 @@ import { searchClient, SearchClientError } from "./searchClient";
 
 const successBody: SearchResponse = {
   results: [],
-  meta: { latencyMs: 0, stagesRan: [], extracted: { description: "" } },
+  meta: {
+    latencyMs: 0,
+    stagesRan: [],
+    extracted: { description: "" },
+    tokens: { prompt: 0, completion: 0, total: 0 },
+    costUsd: 0,
+    topResults: [],
+  },
 };
 
 describe("searchClient", () => {

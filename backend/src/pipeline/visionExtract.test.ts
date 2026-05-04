@@ -1,13 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ExtractedAttributes } from "shared/wire";
 import type { Provider } from "../providers/index.js";
+import type { ExtractFromImageResult } from "../providers/types.js";
 import { ProviderError } from "../providers/index.js";
 import { visionExtract } from "./visionExtract.js";
 
 const TINY_PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 
 function fakeProvider(
-  fn: (input: Parameters<Provider["extractFromImage"]>[0]) => Promise<ExtractedAttributes>,
+  fn: (input: Parameters<Provider["extractFromImage"]>[0]) => Promise<ExtractFromImageResult>,
 ): Provider {
   return {
     name: "fake",
@@ -16,10 +17,14 @@ function fakeProvider(
 }
 
 describe("visionExtract stage", () => {
-  it("calls provider.extractFromImage with the inputs and returns the result", async () => {
-    const expected: ExtractedAttributes = {
+  it("calls provider.extractFromImage with the inputs and returns the full result envelope", async () => {
+    const extracted: ExtractedAttributes = {
       category: "Sofas",
       description: "A modern grey sectional",
+    };
+    const expected: ExtractFromImageResult = {
+      extracted,
+      usage: { promptTokens: 100, completionTokens: 50, model: "gpt-4o-mini" },
     };
     const provider = fakeProvider(async () => expected);
 
@@ -34,6 +39,12 @@ describe("visionExtract stage", () => {
     );
 
     expect(result).toEqual(expected);
+    expect(result.extracted).toEqual(extracted);
+    expect(result.usage).toEqual({
+      promptTokens: 100,
+      completionTokens: 50,
+      model: "gpt-4o-mini",
+    });
     expect(provider.extractFromImage).toHaveBeenCalledWith({
       image: TINY_PNG,
       mimeType: "image/png",
@@ -44,7 +55,10 @@ describe("visionExtract stage", () => {
   });
 
   it("omits userPrompt when no prompt was supplied", async () => {
-    const provider = fakeProvider(async () => ({ description: "x" }));
+    const provider = fakeProvider(async () => ({
+      extracted: { description: "x" },
+      usage: { promptTokens: 0, completionTokens: 0, model: "gpt-4o" },
+    }));
 
     await visionExtract(
       { image: TINY_PNG, mimeType: "image/jpeg", apiKey: "k" },

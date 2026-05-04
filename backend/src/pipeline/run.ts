@@ -1,5 +1,7 @@
 import type { SearchResponse } from "shared/wire";
 import type { Provider } from "../providers/index.js";
+import type { ProviderUsage } from "../providers/types.js";
+import { priceFor } from "../providers/pricing.js";
 import type { Config } from "../config/store.js";
 import type { Metrics } from "../metrics/collector.js";
 import type { SearchCatalogFn } from "./catalogSearch.js";
@@ -31,34 +33,39 @@ export async function runPipeline(
 ): Promise<SearchResponse> {
   const config = deps.getConfig();
   const metrics = deps.createMetrics();
+  const usages: ProviderUsage[] = [];
 
   const stopVision = metrics.stage("visionExtract");
-  const extracted = await visionExtract(input, {
+  const visionResult = await visionExtract(input, {
     provider: deps.provider,
     visionModel: config.visionModel,
   });
   stopVision();
+  const extracted = visionResult.extracted;
+  usages.push(visionResult.usage);
 
   const stopQuery = metrics.stage("queryBuild");
   const built = queryBuild(extracted, input.prompt);
   stopQuery();
 
   const stopSearch = metrics.stage("catalogSearch");
-  const candidates = await catalogSearch(built, {
+  const search = await catalogSearch(built, {
     searchCatalog: deps.searchCatalog,
     topK: config.topK,
   });
   stopSearch();
 
-  let results = candidates;
+  let results = search.products;
   if (config.rerank) {
     const stopRerank = metrics.stage("rerank");
-    results = await rerank(candidates, extracted, { enabled: true });
+    results = await rerank(search.products, extracted, { enabled: true });
     stopRerank();
   }
 
   const finalized = metrics.finalize();
   const lowConfidence = results.length === 0;
+  const tokens = sumTokens(usages);
+  const costUsd = sumCost(usages);
 
   return {
     results,
@@ -66,7 +73,32 @@ export async function runPipeline(
       latencyMs: finalized.latencyMs,
       stagesRan: finalized.stagesRan,
       extracted,
+      tokens,
+      costUsd,
+      topResults: search.topRaw,
       ...(lowConfidence ? { lowConfidence: true } : {}),
     },
   };
+}
+
+function sumTokens(usages: ProviderUsage[]): {
+  prompt: number;
+  completion: number;
+  total: number;
+} {
+  let prompt = 0;
+  let completion = 0;
+  for (const u of usages) {
+    prompt += u.promptTokens;
+    completion += u.completionTokens;
+  }
+  return { prompt, completion, total: prompt + completion };
+}
+
+function sumCost(usages: ProviderUsage[]): number {
+  let total = 0;
+  for (const u of usages) {
+    total += priceFor(u.model, u.promptTokens, u.completionTokens);
+  }
+  return total;
 }

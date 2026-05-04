@@ -1,7 +1,12 @@
 import OpenAI from "openai";
 import { PRODUCT_CATEGORIES } from "shared/catalog";
 import type { ExtractedAttributes } from "shared/wire";
-import { ProviderError, type ExtractFromImageInput, type Provider } from "./types.js";
+import {
+  ProviderError,
+  type ExtractFromImageInput,
+  type ExtractFromImageResult,
+  type Provider,
+} from "./types.js";
 
 // The model signals "I cannot match this image" by setting `unrecognized: true`
 // in the structured JSON response; the adapter converts that into a typed
@@ -86,12 +91,30 @@ function toExtracted(raw: RawExtraction): ExtractedAttributes {
   return out;
 }
 
+interface RawCompletion {
+  choices: Array<{ message: { content?: string | null } }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+  } | null;
+}
+
+// The Node SDK retries 429 / 5xx / network errors automatically with
+// exponential backoff and honors `Retry-After`. Default is 2 retries; we
+// bump to 5 so a brief burst against per-minute limits resolves transparently
+// instead of bubbling out as a `PROVIDER_HTTP_ERROR`. 5 retries × 8s max
+// backoff is bounded — never an unbounded wait.
+const SDK_MAX_RETRIES = 5;
+
 async function extractFromImage(
   input: ExtractFromImageInput,
-): Promise<ExtractedAttributes> {
-  const client = new OpenAI({ apiKey: input.apiKey });
+): Promise<ExtractFromImageResult> {
+  const client = new OpenAI({
+    apiKey: input.apiKey,
+    maxRetries: SDK_MAX_RETRIES,
+  });
 
-  let completion: { choices: Array<{ message: { content?: string | null } }> };
+  let completion: RawCompletion;
   try {
     completion = (await client.chat.completions.create({
       model: input.model,
@@ -100,15 +123,23 @@ async function extractFromImage(
         { role: "user", content: buildUserContent(input) },
       ],
       response_format: { type: "json_schema", json_schema: RESPONSE_SCHEMA },
-    })) as typeof completion;
-  } catch {
-    // Defensive scrubbing: even though the OpenAI SDK does not embed the API
-    // key in its errors, we never echo upstream messages — we surface a
-    // fixed, user-safe message so the key cannot leak via logs or error
-    // responses.
+    })) as RawCompletion;
+  } catch (err) {
+    // Defensive scrubbing: we never echo the upstream `.message` (it can
+    // occasionally include request details). The SDK's `.status` (HTTP int)
+    // and `.code` (documented enum, e.g. "insufficient_quota",
+    // "invalid_api_key", "model_not_found") are safe to surface — they
+    // never contain the API key.
+    const upstream = err as { status?: number; code?: string };
+    const upstreamStatus =
+      typeof upstream?.status === "number" ? upstream.status : undefined;
+    const upstreamCode =
+      typeof upstream?.code === "string" ? upstream.code : undefined;
     throw new ProviderError({
       code: "PROVIDER_HTTP_ERROR",
       message: "The model provider rejected the request.",
+      upstreamStatus,
+      upstreamCode,
     });
   }
 
@@ -137,7 +168,13 @@ async function extractFromImage(
     });
   }
 
-  return toExtracted(parsed);
+  const usage = {
+    promptTokens: completion.usage?.prompt_tokens ?? 0,
+    completionTokens: completion.usage?.completion_tokens ?? 0,
+    model: input.model,
+  };
+
+  return { extracted: toExtracted(parsed), usage };
 }
 
 export const openAIProvider: Provider = {

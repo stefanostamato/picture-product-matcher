@@ -38,12 +38,78 @@ describe("wire types", () => {
         latencyMs: 1234,
         stagesRan: ["visionExtract", "queryBuild", "catalogSearch"],
         extracted,
+        tokens: { prompt: 100, completion: 50, total: 150 },
+        costUsd: 0.000123,
+        topResults: [
+          { productId: "65fa1b2c3d4e5f6a7b8c9d01", score: 4.5 },
+          { productId: "65fa1b2c3d4e5f6a7b8c9d02", score: 3.2 },
+          { productId: "65fa1b2c3d4e5f6a7b8c9d03", score: 1.7 },
+        ],
       },
     };
 
     expect(response.results).toHaveLength(1);
     expect(response.meta.stagesRan).toContain("visionExtract");
     expect(response.meta.extracted.category).toBe("Benches");
+    expect(response.meta.tokens.total).toBe(150);
+    expect(response.meta.costUsd).toBeCloseTo(0.000123, 6);
+    expect(response.meta.topResults).toHaveLength(3);
+    expect(response.meta.topResults[0]?.productId).toBe(
+      "65fa1b2c3d4e5f6a7b8c9d01",
+    );
+  });
+
+  it("SearchResponseMeta requires tokens, costUsd, and topResults", () => {
+    const extracted: ExtractedAttributes = {
+      description: "A wooden chair.",
+    };
+
+    // @ts-expect-error - `tokens` is required on SearchResponseMeta
+    const missingTokens: SearchResponse["meta"] = {
+      latencyMs: 10,
+      stagesRan: [],
+      extracted,
+      costUsd: 0,
+      topResults: [],
+    };
+    expect(missingTokens.costUsd).toBe(0);
+
+    // @ts-expect-error - `costUsd` is required on SearchResponseMeta
+    const missingCost: SearchResponse["meta"] = {
+      latencyMs: 10,
+      stagesRan: [],
+      extracted,
+      tokens: { prompt: 0, completion: 0, total: 0 },
+      topResults: [],
+    };
+    expect(missingCost.tokens.total).toBe(0);
+
+    // @ts-expect-error - `topResults` is required on SearchResponseMeta
+    const missingTop: SearchResponse["meta"] = {
+      latencyMs: 10,
+      stagesRan: [],
+      extracted,
+      tokens: { prompt: 0, completion: 0, total: 0 },
+      costUsd: 0,
+    };
+    expect(missingTop.tokens.total).toBe(0);
+  });
+
+  it("SearchResponseMeta accepts an empty topResults array", () => {
+    const extracted: ExtractedAttributes = {
+      description: "Nothing matched.",
+    };
+    const meta: SearchResponse["meta"] = {
+      latencyMs: 42,
+      stagesRan: ["visionExtract", "catalogSearch"],
+      extracted,
+      tokens: { prompt: 10, completion: 0, total: 10 },
+      costUsd: 0,
+      topResults: [],
+      lowConfidence: true,
+    };
+    expect(meta.topResults).toEqual([]);
+    expect(meta.lowConfidence).toBe(true);
   });
 
   it("ExtractedAttributes allows the optional fields to be omitted", () => {

@@ -65,6 +65,23 @@ export interface SearchResponseMeta {
   /** Whatever the vision stage saw — surfaced so the UI can show the user
    *  why these results came back. */
   extracted: ExtractedAttributes;
+  /** Aggregate LLM token usage across every provider call this pipeline
+   *  made (vision extraction, optional rerank, etc.). `total` is just
+   *  `prompt + completion`, surfaced so consumers don't have to recompute. */
+  tokens: {
+    prompt: number;
+    completion: number;
+    total: number;
+  };
+  /** Aggregate USD cost for the LLM calls this pipeline made, computed
+   *  from token usage and the provider's rate card. */
+  costUsd: number;
+  /** Top 3 raw catalog hits before any rerank, exposed for the dev-only
+   *  diagnostic panel and the eval harness. Empty when nothing matched. */
+  topResults: Array<{
+    productId: string;
+    score: number;
+  }>;
   /** True when the catalog stage returned zero or near-zero matches and the
    *  results are best-effort rather than confident. */
   lowConfidence?: boolean;
@@ -86,4 +103,11 @@ export interface ApiError {
   code: string;
   /** Human-readable message safe to show the user. Never contains the API key. */
   message: string;
+  /** HTTP status reported by the upstream model provider, when applicable.
+   * Safe to surface — never the API key. */
+  upstreamStatus?: number;
+  /** Documented error code from the upstream provider (e.g.
+   * `rate_limit_exceeded`, `insufficient_quota`, `model_not_found`,
+   * `invalid_api_key`), when applicable. Safe to surface. */
+  upstreamCode?: string;
 }

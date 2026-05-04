@@ -76,6 +76,9 @@ const happyResponse: SearchResponse = {
     latencyMs: 12,
     stagesRan: ["visionExtract", "queryBuild", "catalogSearch"],
     extracted: { description: "modern sofa" },
+    tokens: { prompt: 0, completion: 0, total: 0 },
+    costUsd: 0,
+    topResults: [],
   },
 };
 

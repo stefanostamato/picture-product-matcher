@@ -2,7 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import type { Product } from "shared/catalog";
 import type { ExtractedAttributes } from "shared/wire";
 import type { Provider } from "../providers/index.js";
+import type { ProviderUsage } from "../providers/types.js";
 import { ProviderError } from "../providers/index.js";
+import { priceFor } from "../providers/pricing.js";
 import type { Config } from "../config/store.js";
 import { createMetrics } from "../metrics/collector.js";
 import { runPipeline } from "./run.js";
@@ -23,10 +25,19 @@ function product(id: string, category = "Sofas"): Product {
   };
 }
 
-function makeProvider(extracted: ExtractedAttributes): Provider {
+const ZERO_USAGE: ProviderUsage = {
+  promptTokens: 0,
+  completionTokens: 0,
+  model: "gpt-4o-mini",
+};
+
+function makeProvider(
+  extracted: ExtractedAttributes,
+  usage: ProviderUsage = ZERO_USAGE,
+): Provider {
   return {
     name: "fake",
-    extractFromImage: vi.fn(async () => extracted),
+    extractFromImage: vi.fn(async () => ({ extracted, usage })),
   };
 }
 
@@ -77,6 +88,76 @@ describe("runPipeline", () => {
       { category: "Sofas" },
       20,
     );
+  });
+
+  it("aggregates provider tokens, computes costUsd, and exposes top-3 raw results in meta", async () => {
+    const extracted: ExtractedAttributes = {
+      category: "Sofas",
+      description: "modern leather sectional",
+    };
+    const usage: ProviderUsage = {
+      promptTokens: 100,
+      completionTokens: 50,
+      model: "gpt-4o-mini",
+    };
+    const provider = makeProvider(extracted, usage);
+    const fixture = [
+      product("a"),
+      product("b"),
+      product("c"),
+      product("d"),
+      product("e"),
+    ];
+    const searchCatalog = vi.fn(async () => fixture);
+
+    const response = await runPipeline(
+      { image: TINY_PNG, mimeType: "image/png", apiKey: "k" },
+      {
+        provider,
+        searchCatalog,
+        getConfig: () => ({ ...baseConfig }),
+        createMetrics,
+      },
+    );
+
+    expect(response.meta.tokens).toEqual({
+      prompt: 100,
+      completion: 50,
+      total: 150,
+    });
+    expect(response.meta.costUsd).toBe(priceFor("gpt-4o-mini", 100, 50));
+
+    expect(response.meta.topResults).toHaveLength(3);
+    expect(response.meta.topResults.map((r) => r.productId)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+    expect(response.meta.topResults[0].score).toBeGreaterThan(
+      response.meta.topResults[1].score,
+    );
+    expect(response.meta.topResults[1].score).toBeGreaterThan(
+      response.meta.topResults[2].score,
+    );
+  });
+
+  it("populates a zero token/cost meta when usage is zero and no rerank ran", async () => {
+    const provider = makeProvider({ description: "x" });
+    const searchCatalog = vi.fn(async () => [] as Product[]);
+
+    const response = await runPipeline(
+      { image: TINY_PNG, mimeType: "image/png", apiKey: "k" },
+      {
+        provider,
+        searchCatalog,
+        getConfig: () => ({ ...baseConfig }),
+        createMetrics,
+      },
+    );
+
+    expect(response.meta.tokens).toEqual({ prompt: 0, completion: 0, total: 0 });
+    expect(response.meta.costUsd).toBe(0);
+    expect(response.meta.topResults).toEqual([]);
   });
 
   it("surfaces ProviderError thrown by the vision stage", async () => {

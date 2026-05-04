@@ -14,12 +14,35 @@ export interface ExtractFromImageInput {
 }
 
 /**
+ * Token + model accounting returned alongside each extraction call. The
+ * pipeline aggregates these to compute per-request cost via the pricing table.
+ * `model` is echoed back so the orchestrator does not have to thread it
+ * through separately, and so non-OpenAI adapters can report whatever
+ * identifier their pricing table keys on.
+ */
+export interface ProviderUsage {
+  promptTokens: number;
+  completionTokens: number;
+  model: string;
+}
+
+/**
+ * Result envelope returned by `extractFromImage`. Splits the parsed attributes
+ * from accounting metadata so callers that don't care about cost can ignore
+ * `usage` cleanly.
+ */
+export interface ExtractFromImageResult {
+  extracted: ExtractedAttributes;
+  usage: ProviderUsage;
+}
+
+/**
  * The single seam every model provider implements. Adding a new adapter is one
  * new file that exports an object satisfying this interface.
  */
 export interface Provider {
   readonly name: string;
-  extractFromImage(input: ExtractFromImageInput): Promise<ExtractedAttributes>;
+  extractFromImage(input: ExtractFromImageInput): Promise<ExtractFromImageResult>;
 }
 
 /**
@@ -41,10 +64,23 @@ export type ProviderErrorCode =
  */
 export class ProviderError extends Error {
   readonly code: ProviderErrorCode;
+  /** HTTP status reported by the upstream API, when the failure was a network
+   * call. Safe to surface in logs — never contains the API key. */
+  readonly upstreamStatus?: number;
+  /** Machine-readable code from the upstream API (e.g. "insufficient_quota",
+   * "model_not_found", "invalid_api_key"). Safe to surface in logs. */
+  readonly upstreamCode?: string;
 
-  constructor(args: { code: ProviderErrorCode; message: string }) {
+  constructor(args: {
+    code: ProviderErrorCode;
+    message: string;
+    upstreamStatus?: number;
+    upstreamCode?: string;
+  }) {
     super(args.message);
     this.name = "ProviderError";
     this.code = args.code;
+    this.upstreamStatus = args.upstreamStatus;
+    this.upstreamCode = args.upstreamCode;
   }
 }

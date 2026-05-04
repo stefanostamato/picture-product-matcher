@@ -15,8 +15,14 @@ const product = (id: string): Product => ({
 });
 
 describe("catalogSearch stage", () => {
-  it("forwards query, filters, and limit to searchCatalog and returns its result", async () => {
-    const fixture: Product[] = [product("a"), product("b")];
+  it("forwards query, filters, and limit to searchCatalog and returns its products plus top-3 raw scores", async () => {
+    const fixture: Product[] = [
+      product("a"),
+      product("b"),
+      product("c"),
+      product("d"),
+      product("e"),
+    ];
     const searchCatalog = vi.fn(async () => fixture);
 
     const result = await catalogSearch(
@@ -24,15 +30,21 @@ describe("catalogSearch stage", () => {
       { searchCatalog, topK: 5 },
     );
 
-    expect(result).toBe(fixture);
+    expect(result.products).toEqual(fixture);
     expect(searchCatalog).toHaveBeenCalledWith(
       "leather sofa",
       { category: "Sofas" },
       5,
     );
+
+    expect(result.topRaw).toHaveLength(3);
+    expect(result.topRaw.map((r) => r.productId)).toEqual(["a", "b", "c"]);
+    // Scores must be in descending order so the diag panel can render them as-is.
+    expect(result.topRaw[0].score).toBeGreaterThan(result.topRaw[1].score);
+    expect(result.topRaw[1].score).toBeGreaterThan(result.topRaw[2].score);
   });
 
-  it("returns an empty array when the catalog has no matches", async () => {
+  it("returns empty products and empty topRaw when the catalog has no matches", async () => {
     const searchCatalog = vi.fn(async () => [] as Product[]);
 
     const result = await catalogSearch(
@@ -40,6 +52,22 @@ describe("catalogSearch stage", () => {
       { searchCatalog, topK: 20 },
     );
 
-    expect(result).toEqual([]);
+    expect(result.products).toEqual([]);
+    expect(result.topRaw).toEqual([]);
+  });
+
+  it("clips topRaw to the available results when fewer than 3 are returned", async () => {
+    const fixture: Product[] = [product("a"), product("b")];
+    const searchCatalog = vi.fn(async () => fixture);
+
+    const result = await catalogSearch(
+      { query: "x", filters: {} },
+      { searchCatalog, topK: 10 },
+    );
+
+    expect(result.products).toEqual(fixture);
+    expect(result.topRaw).toHaveLength(2);
+    expect(result.topRaw.map((r) => r.productId)).toEqual(["a", "b"]);
+    expect(result.topRaw[0].score).toBeGreaterThan(result.topRaw[1].score);
   });
 });

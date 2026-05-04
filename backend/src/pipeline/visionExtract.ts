@@ -1,5 +1,5 @@
-import type { ExtractedAttributes } from "shared/wire";
 import type { Provider } from "../providers/index.js";
+import type { ExtractFromImageResult } from "../providers/types.js";
 
 export interface VisionExtractInput {
   image: Buffer;
@@ -14,11 +14,12 @@ export interface VisionExtractDeps {
 }
 
 // Thin adapter from the pipeline's named input shape to the provider's
-// `extractFromImage` call. Kept tiny so the orchestrator stays linear.
+// `extractFromImage` call. Returns the full `{ extracted, usage }` envelope so
+// the orchestrator can aggregate token usage across stages.
 export async function visionExtract(
   input: VisionExtractInput,
   deps: VisionExtractDeps,
-): Promise<ExtractedAttributes> {
+): Promise<ExtractFromImageResult> {
   return deps.provider.extractFromImage({
     image: input.image,
     mimeType: input.mimeType,

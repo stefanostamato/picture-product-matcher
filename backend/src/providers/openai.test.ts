@@ -26,7 +26,14 @@ import { ProviderError } from "./types.js";
 const SECRET_KEY = "sk-test-do-not-leak-1234567890";
 const TINY_PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 
-function mockResponse(payload: unknown) {
+function mockResponse(
+  payload: unknown,
+  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } = {
+    prompt_tokens: 42,
+    completion_tokens: 17,
+    total_tokens: 59,
+  },
+) {
   return {
     choices: [
       {
@@ -35,6 +42,7 @@ function mockResponse(payload: unknown) {
         },
       },
     ],
+    usage,
   };
 }
 
@@ -63,7 +71,7 @@ describe("openAIProvider.extractFromImage", () => {
       model: "gpt-4o-mini",
     });
 
-    expect(result).toEqual({
+    expect(result.extracted).toEqual({
       category: "Sofas",
       type: "Sectional",
       style: "modern",
@@ -73,6 +81,47 @@ describe("openAIProvider.extractFromImage", () => {
       description: "A modern charcoal leather sectional sofa.",
     });
     expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("propagates usage (prompt/completion tokens + model) from the SDK response", async () => {
+    mockCreate.mockResolvedValueOnce(
+      mockResponse(
+        { description: "A small armchair." },
+        { prompt_tokens: 1234, completion_tokens: 567, total_tokens: 1801 },
+      ),
+    );
+
+    const result = await openAIProvider.extractFromImage({
+      image: TINY_PNG,
+      mimeType: "image/png",
+      apiKey: SECRET_KEY,
+      model: "gpt-4o-mini",
+    });
+
+    expect(result.usage).toEqual({
+      promptTokens: 1234,
+      completionTokens: 567,
+      model: "gpt-4o-mini",
+    });
+  });
+
+  it("falls back to zero token counts when the SDK response omits usage", async () => {
+    mockCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ description: "x" }) } }],
+    });
+
+    const result = await openAIProvider.extractFromImage({
+      image: TINY_PNG,
+      mimeType: "image/png",
+      apiKey: SECRET_KEY,
+      model: "gpt-4o",
+    });
+
+    expect(result.usage).toEqual({
+      promptTokens: 0,
+      completionTokens: 0,
+      model: "gpt-4o",
+    });
   });
 
   it("forwards the user prompt to the model when provided", async () => {
