@@ -68,6 +68,10 @@ export function mapErrorToResponse(error: unknown, apiKey?: string): MappedError
       body: {
         code: "PROVIDER_ERROR",
         message: scrub(error.message, apiKey),
+        ...(error.upstreamStatus !== undefined
+          ? { upstreamStatus: error.upstreamStatus }
+          : {}),
+        ...(error.upstreamCode ? { upstreamCode: error.upstreamCode } : {}),
       },
     };
   }

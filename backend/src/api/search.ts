@@ -123,10 +123,23 @@ function handleError(error: unknown, req: Request, res: Response): void {
 
 function scrubError(error: unknown, apiKey: string | undefined): unknown {
   if (!(error instanceof Error)) return error;
-  if (!apiKey) return error;
+  const upstream = error as {
+    code?: unknown;
+    upstreamStatus?: unknown;
+    upstreamCode?: unknown;
+  };
+  const extras: Record<string, unknown> = {};
+  if (typeof upstream.code === "string") extras.code = upstream.code;
+  if (typeof upstream.upstreamStatus === "number")
+    extras.upstreamStatus = upstream.upstreamStatus;
+  if (typeof upstream.upstreamCode === "string")
+    extras.upstreamCode = upstream.upstreamCode;
+  if (!apiKey) {
+    return { name: error.name, message: error.message, ...extras, stack: error.stack };
+  }
   const message = error.message.split(apiKey).join("[redacted]");
   const stack = error.stack?.split(apiKey).join("[redacted]");
-  return { name: error.name, message, stack };
+  return { name: error.name, message, ...extras, stack };
 }
 
 function normalizeMulterError(error: unknown): unknown {

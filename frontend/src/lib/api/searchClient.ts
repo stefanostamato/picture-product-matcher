@@ -10,11 +10,20 @@ export class SearchClientError extends Error {
   readonly name = "SearchClientError";
   readonly code: string;
   readonly status: number;
+  readonly upstreamStatus?: number;
+  readonly upstreamCode?: string;
 
-  constructor(code: string, message: string, status: number) {
+  constructor(
+    code: string,
+    message: string,
+    status: number,
+    upstream?: { upstreamStatus?: number; upstreamCode?: string },
+  ) {
     super(message);
     this.code = code;
     this.status = status;
+    this.upstreamStatus = upstream?.upstreamStatus;
+    this.upstreamCode = upstream?.upstreamCode;
   }
 }
 
@@ -50,6 +59,10 @@ export async function searchClient(
       parsed.code ?? "UNKNOWN",
       parsed.message ?? `Request failed with status ${response.status}`,
       response.status,
+      {
+        upstreamStatus: parsed.upstreamStatus,
+        upstreamCode: parsed.upstreamCode,
+      },
     );
   }
 
