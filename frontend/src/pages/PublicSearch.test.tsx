@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { SearchResponse } from "shared/wire";
 import { PublicSearch } from "./PublicSearch";
@@ -44,6 +44,12 @@ const okResponse: SearchResponse = {
     latencyMs: 42,
     stagesRan: ["visionExtract", "queryBuild", "catalogSearch"],
     extracted: { description: "modern sofa", category: "Sofas" },
+    tokens: { prompt: 80, completion: 40, total: 120 },
+    costUsd: 0.00042,
+    topResults: [
+      { productId: "1", score: 8.1 },
+      { productId: "2", score: 6.0 },
+    ],
   },
 };
 
@@ -57,6 +63,13 @@ const setFile = (input: HTMLElement, file: File) => {
 describe("PublicSearch", () => {
   beforeEach(() => {
     searchClientMock.mockReset();
+    // Default off so existing assertions don't double-match against the
+    // dev-only diag panel; tests that need it stub it back on.
+    vi.stubEnv("DEV", false);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("disables the submit button until both an API key and an image are present", () => {
@@ -144,5 +157,34 @@ describe("PublicSearch", () => {
 
     await screen.findByText("Modern Sofa");
     expect(screen.getByText(/low confidence/i)).toBeInTheDocument();
+  });
+
+  it("renders the diagnostic panel after a successful search in dev mode", async () => {
+    vi.stubEnv("DEV", true);
+    searchClientMock.mockResolvedValue(okResponse);
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(/api key/i), {
+      target: { value: "sk" },
+    });
+    setFile(screen.getByLabelText(/image/i), fileFromBytes());
+    fireEvent.click(screen.getByRole("button", { name: /search/i }));
+
+    await screen.findByText("Modern Sofa");
+    expect(screen.getByTestId("diag-panel")).toBeInTheDocument();
+  });
+
+  it("does not render the diagnostic panel when not in dev mode", async () => {
+    searchClientMock.mockResolvedValue(okResponse);
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText(/api key/i), {
+      target: { value: "sk" },
+    });
+    setFile(screen.getByLabelText(/image/i), fileFromBytes());
+    fireEvent.click(screen.getByRole("button", { name: /search/i }));
+
+    await screen.findByText("Modern Sofa");
+    expect(screen.queryByTestId("diag-panel")).toBeNull();
   });
 });

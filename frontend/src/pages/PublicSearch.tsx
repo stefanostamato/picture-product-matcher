@@ -5,12 +5,15 @@ import { ImageDrop } from "../components/ImageDrop";
 import { PromptInput } from "../components/PromptInput";
 import { ResultsGrid } from "../components/ResultsGrid";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { DiagPanel } from "../components/DiagPanel";
 import { searchClient, SearchClientError } from "../lib/api/searchClient";
 import { useApiKey } from "../lib/state/apiKey";
 
 interface ErrorState {
   code: string;
   message: string;
+  upstreamStatus?: number;
+  upstreamCode?: string;
 }
 
 export function PublicSearch() {
@@ -38,7 +41,12 @@ export function PublicSearch() {
       setResponse(result);
     } catch (err) {
       if (err instanceof SearchClientError) {
-        setError({ code: err.code, message: err.message });
+        setError({
+          code: err.code,
+          message: err.message,
+          upstreamStatus: err.upstreamStatus,
+          upstreamCode: err.upstreamCode,
+        });
       } else {
         setError({
           code: "UNKNOWN",
@@ -66,7 +74,14 @@ export function PublicSearch() {
         </button>
       </form>
 
-      {error ? <ErrorBanner code={error.code} message={error.message} /> : null}
+      {error ? (
+        <ErrorBanner
+          code={error.code}
+          message={error.message}
+          upstreamStatus={error.upstreamStatus}
+          upstreamCode={error.upstreamCode}
+        />
+      ) : null}
 
       {response ? (
         <section className="results-section">
@@ -76,6 +91,7 @@ export function PublicSearch() {
             </div>
           ) : null}
           <ResultsGrid results={response.results} />
+          {import.meta.env.DEV ? <DiagPanel meta={response.meta} /> : null}
         </section>
       ) : null}
     </main>
