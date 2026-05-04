@@ -9,7 +9,12 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gold:sample": "tsx --env-file=../.env eval/scripts/sample-products.ts",
+    "gold:generate": "tsx --env-file=../.env eval/scripts/generate-gold.ts",
+    "gold:attrs": "tsx --env-file=../.env eval/scripts/extract-gold-attrs.ts",
+    "manual:fetch": "tsx eval/scripts/fetch-manual.ts",
+    "eval": "tsx --env-file=../.env eval/index.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

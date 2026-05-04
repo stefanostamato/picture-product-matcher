@@ -16,6 +16,6 @@
       "shared/*": ["../shared/src/*"]
     }
   },
-  "include": ["src/**/*", "test/**/*", "../shared/src/**/*"],
+  "include": ["src/**/*", "test/**/*", "eval/**/*", "../shared/src/**/*"],
   "exclude": ["../shared/src/**/*.test.ts"]
 }
