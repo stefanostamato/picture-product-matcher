@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import { registerSearchRoute } from "./api/search.js";
+import { registerAdminRoutes } from "./api/admin/routes.js";
 
 const DEFAULT_ALLOWED_ORIGINS = ["http://localhost:5173"];
 
@@ -10,13 +11,19 @@ export function createApp(): Express {
   const origins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
     : DEFAULT_ALLOWED_ORIGINS;
-  app.use(cors({ origin: origins, allowedHeaders: ["Content-Type", "x-api-key"] }));
+  app.use(
+    cors({
+      origin: origins,
+      allowedHeaders: ["Content-Type", "x-api-key", "x-admin-password"],
+    }),
+  );
 
   app.get("/health", (_req, res) => {
     res.status(200).json({ ok: true });
   });
 
   registerSearchRoute(app);
+  registerAdminRoutes(app);
 
   return app;
 }
