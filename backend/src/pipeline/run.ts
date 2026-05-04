@@ -39,6 +39,7 @@ export async function runPipeline(
   const visionResult = await visionExtract(input, {
     provider: deps.provider,
     visionModel: config.visionModel,
+    visionPrompt: config.visionPrompt,
   });
   stopVision();
   const extracted = visionResult.extracted;
@@ -58,8 +59,21 @@ export async function runPipeline(
   let results = search.products;
   if (config.rerank) {
     const stopRerank = metrics.stage("rerank");
-    results = await rerank(search.products, extracted, { enabled: true });
+    const rerankResult = await rerank(search.products, extracted, {
+      enabled: true,
+      provider: deps.provider,
+      apiKey: input.apiKey,
+      image: input.image,
+      mimeType: input.mimeType,
+      model: config.rerankModel,
+      systemPrompt: config.rerankPrompt,
+      topN: config.rerankTopN,
+    });
     stopRerank();
+    results = rerankResult.products;
+    if (rerankResult.usage) {
+      usages.push(rerankResult.usage);
+    }
   }
 
   const finalized = metrics.finalize();

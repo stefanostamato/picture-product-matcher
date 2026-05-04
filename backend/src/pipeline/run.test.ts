@@ -38,6 +38,7 @@ function makeProvider(
   return {
     name: "fake",
     extractFromImage: vi.fn(async () => ({ extracted, usage })),
+    rerankWithImage: vi.fn(),
   };
 }
 
@@ -46,6 +47,10 @@ const baseConfig: Config = {
   rerank: false,
   provider: "openai",
   visionModel: "gpt-4o-mini",
+  visionPrompt: "test-vision-prompt",
+  rerankModel: "gpt-4o-mini",
+  rerankPrompt: "test-rerank-prompt",
+  rerankTopN: 10,
 };
 
 describe("runPipeline", () => {
@@ -169,6 +174,7 @@ describe("runPipeline", () => {
           message: "We couldn't recognize this image.",
         });
       }),
+      rerankWithImage: vi.fn(),
     };
     const searchCatalog = vi.fn(async () => [] as Product[]);
 
@@ -233,6 +239,10 @@ describe("runPipeline", () => {
 
   it("runs the rerank stage when config.rerank is true", async () => {
     const provider = makeProvider({ description: "x" });
+    (provider.rerankWithImage as ReturnType<typeof vi.fn>).mockResolvedValue({
+      orderedIds: ["a", "b"],
+      usage: ZERO_USAGE,
+    });
     const fixture = [product("a"), product("b")];
     const searchCatalog = vi.fn(async () => fixture);
 
@@ -247,7 +257,6 @@ describe("runPipeline", () => {
     );
 
     expect(response.meta.stagesRan).toContain("rerank");
-    // Stub passthrough preserves order today.
     expect(response.results).toEqual(fixture);
   });
 
@@ -269,5 +278,138 @@ describe("runPipeline", () => {
       .calls[0][0];
     expect(arg.model).toBe("gpt-4o");
     expect(arg.apiKey).toBe("k");
+  });
+
+  it("threads config.visionPrompt to the provider as systemPrompt", async () => {
+    const provider = makeProvider({ description: "x" });
+    const searchCatalog = vi.fn(async () => [product("a")]);
+
+    await runPipeline(
+      { image: TINY_PNG, mimeType: "image/png", apiKey: "k" },
+      {
+        provider,
+        searchCatalog,
+        getConfig: () => ({ ...baseConfig, visionPrompt: "fixture" }),
+        createMetrics,
+      },
+    );
+
+    const arg = (provider.extractFromImage as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
+    expect(arg.systemPrompt).toBe("fixture");
+  });
+
+  it("threads rerank knobs through, reorders results, and aggregates rerank usage into tokens/cost", async () => {
+    const visionUsage: ProviderUsage = {
+      promptTokens: 100,
+      completionTokens: 50,
+      model: "gpt-4o-mini",
+    };
+    const rerankUsage: ProviderUsage = {
+      promptTokens: 30,
+      completionTokens: 10,
+      model: "gpt-4o-mini",
+    };
+    const extracted: ExtractedAttributes = {
+      category: "Sofas",
+      description: "modern leather sectional",
+    };
+    const provider: Provider = {
+      name: "fake",
+      extractFromImage: vi.fn(async () => ({ extracted, usage: visionUsage })),
+      rerankWithImage: vi.fn(async () => ({
+        orderedIds: ["b", "a"],
+        usage: rerankUsage,
+      })),
+    };
+    const fixture = [
+      product("a"),
+      product("b"),
+      product("c"),
+      product("d"),
+      product("e"),
+    ];
+    const searchCatalog = vi.fn(async () => fixture);
+
+    const response = await runPipeline(
+      {
+        image: TINY_PNG,
+        mimeType: "image/png",
+        apiKey: "sk-test",
+      },
+      {
+        provider,
+        searchCatalog,
+        getConfig: () => ({
+          ...baseConfig,
+          rerank: true,
+          rerankModel: "gpt-4o-mini",
+          rerankPrompt: "Y",
+          rerankTopN: 2,
+        }),
+        createMetrics,
+      },
+    );
+
+    // The first two are reordered; the tail is preserved verbatim.
+    expect(response.results.map((r) => r._id)).toEqual([
+      "b",
+      "a",
+      "c",
+      "d",
+      "e",
+    ]);
+
+    // Vision + rerank tokens roll up.
+    expect(response.meta.tokens).toEqual({
+      prompt: 130,
+      completion: 60,
+      total: 190,
+    });
+    expect(response.meta.costUsd).toBe(
+      priceFor("gpt-4o-mini", 100, 50) + priceFor("gpt-4o-mini", 30, 10),
+    );
+
+    // The rerank stage was recorded.
+    expect(response.meta.stagesRan).toContain("rerank");
+
+    // Rerank does not affect topResults — those are the catalog stage's pre-rerank top-3.
+    expect(response.meta.topResults.map((r) => r.productId)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+
+    // Provider was called with the threaded knobs, image, and api key.
+    const rerankCall = (
+      provider.rerankWithImage as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(rerankCall.apiKey).toBe("sk-test");
+    expect(rerankCall.image).toBe(TINY_PNG);
+    expect(rerankCall.mimeType).toBe("image/png");
+    expect(rerankCall.model).toBe("gpt-4o-mini");
+    expect(rerankCall.systemPrompt).toBe("Y");
+    expect(rerankCall.candidates.map((c: { id: string }) => c.id)).toEqual([
+      "a",
+      "b",
+    ]);
+  });
+
+  it("does not call provider.rerankWithImage when rerank is disabled", async () => {
+    const provider = makeProvider({ description: "x" });
+    const searchCatalog = vi.fn(async () => [product("a"), product("b")]);
+
+    const response = await runPipeline(
+      { image: TINY_PNG, mimeType: "image/png", apiKey: "k" },
+      {
+        provider,
+        searchCatalog,
+        getConfig: () => ({ ...baseConfig, rerank: false }),
+        createMetrics,
+      },
+    );
+
+    expect(provider.rerankWithImage).not.toHaveBeenCalled();
+    expect(response.meta.stagesRan).not.toContain("rerank");
   });
 });
