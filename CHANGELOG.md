@@ -5,7 +5,77 @@ sized task graphs the `/plan` command produced from a feature
 description; the `/execute` command then fans them out across parallel
 subagents. `NOTES.md` has the play-by-play and the originating prompts.
 
-## v3 — admin-ui
+## v4 — retrieval-tuning
+
+No plan file: this slice was a tight eval → adjust → re-eval loop
+rather than a pre-planned task graph. The full play-by-play (both
+eval runs, the hypotheses, what landed, what got falsified) is in
+[`NOTES.md`](NOTES.md) section "6. Eval and fine tune retrieval".
+
+### What shipped
+
+- `type` is now a closed per-category enum on the vision stage. The
+  catalog has exactly 62 distinct `type` values across the 15
+  categories; those are now baked into both the structured-output
+  JSON schema (`enum`) and the default vision prompt (one line per
+  category). Previously `type` was an open string and the eval
+  showed it as the dominant `typeMiss` driver.
+- Default `rerankTopN` bumped 10 → 20 to match `topK`. Rerank now
+  reorders the full catalog window the previous stage already
+  returned, instead of slicing it down before reordering.
+- Two new rows in `backend/eval/history.jsonl` capturing the
+  before/after — visible in the admin history table.
+- `scripts/explore-db.mjs` gained a "types per category" dump used to
+  derive the enum once and check it into `shared/src/catalog.ts`.
+
+### Architecture decisions
+
+- **Closed enum at the schema layer, not just in the prompt.** A
+  prompt instruction is advisory; an `enum` on the structured-output
+  schema is enforced by the model server. Both are in place because
+  the prompt is what teaches the model *which* type belongs to which
+  category — the schema only knows the flat union of all 62 values.
+- **Vocab lives in `shared/`, derived once.** `PRODUCT_TYPES_BY_CATEGORY`
+  is checked-in static data, not pulled from Mongo at request time.
+  The catalog is small and effectively closed; one round-trip per
+  request to learn it would be wasted latency. The `explore-db.mjs`
+  helper is the regeneration path if the catalog ever grows.
+- **`rerankTopN` defaults to match `topK`.** The two are independently
+  tunable, but the only reason `rerankTopN < topK` is "rerank is too
+  expensive at full width" — and at this catalog size it isn't. Same
+  default is the principle-of-least-surprise choice for an admin
+  staring at the config form.
+- **Re-evaluated after, didn't trust the hypothesis.** Both changes
+  were motivated by separate hypotheses (type enum → fewer typeMiss;
+  wider rerank window → better MRR). The second eval run confirms
+  type-hit went 0.43 → 0.57 and MRR went 0.17 → 0.19 (best so far),
+  but recall@5/@20 still trails the no-rerank baseline. The ROI of
+  rerank vs. raw vector order is now an open question rather than an
+  assumption — explicitly logged in NOTES so the next iteration
+  starts from data, not from a guess.
+
+### Out of scope (deferred by design)
+
+Rerank that **drops** rather than reorders, attribute-weighted
+scoring, splitting the type identifier into its own pipeline stage,
+per-stage model-size tuning, perceptual-hash (pHash/dHash) prefilter
+or fallback, multi-provider support. The eval-vs-baseline regression
+on recall is documented but not chased — the next iteration should
+either earn rerank's keep on recall or fall back to raw vector order
+with a cheaper post-filter.
+
+### Driving prompts
+
+> Here's the eval result - can you compare it with the others?
+> [paste of eval output]
+
+That comparison surfaced the type-vs-recall split that drove this
+slice: rerank was helping MRR/type-hit but hurting recall@5/@20
+versus the no-rerank baseline. The two changes here are the
+cheapest interventions that target each side of that split
+without altering pipeline topology.
+
+## v3 — admin-ui + LLM rerank stage
 
 Plan: [`plans/admin-ui.md`](plans/admin-ui.md).
 

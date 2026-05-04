@@ -250,9 +250,126 @@ After building this, I manually tested a few things:
 * manually tested the admin and adjusting knobs
 * all seems to be working pretty well!
 
-I decided to push these changes.
+I decided to push these changes. At this point in time I was about ~40 minutes overtime.
+
+# 6. Eval and fine tune retrieval
+I wanted to see the changes in retrieval performance in action. So I ran the eval suite. Here are the results:
+
+```
+=== Eval results (overall) ===
+n              30
+recall@1       0.100
+recall@5       0.233
+recall@20      0.500
+mrr            0.170
+category-hit   0.933
+type-hit       0.433
+attr-overlap   0.119
+p50 latency    12790 ms
+p95 latency    28595 ms
+tokens (total) 1590558
+cost           $0.24371
+failures       missing=15 categoryMiss=2 typeMiss=17
+
+=== By category ===
+category        n   r@1    r@5    r@20   mrr    attr   $         
+Beds            2   0.000  0.500  1.000  0.313  0.100  $0.01620  
+Benches         2   0.000  0.000  0.500  0.038  0.000  $0.01625  
+Bookshelves     2   0.000  0.000  0.500  0.036  0.000  $0.01627  
+Cabinets        2   0.000  0.000  0.000  0.000  0.100  $0.01629  
+Chairs          2   0.000  0.000  0.000  0.000  0.000  $0.01623  
+Coffee Tables   2   0.000  0.000  0.000  0.000  0.000  $0.01625  
+Desks           2   0.000  0.000  0.500  0.063  0.250  $0.01623  
+Dressers        2   0.000  0.000  0.000  0.000  0.000  $0.01628  
+Lighting        2   0.000  0.500  1.000  0.212  0.250  $0.01624  
+Nightstands     2   0.000  0.500  1.000  0.126  0.000  $0.01625  
+Ottomans        2   0.000  0.000  0.500  0.083  0.200  $0.01622  
+Sofas           2   0.500  1.000  1.000  0.625  0.333  $0.01626  
+TV Stands       2   0.500  0.500  0.500  0.500  0.350  $0.01625  
+Tables          2   0.500  0.500  1.000  0.550  0.100  $0.01623  
+Wardrobes       2   0.000  0.000  0.000  0.000  0.100  $0.01627  
+```
+
+The beauty of the setup we invested in is that it makes tuning easy, and any improvements/regressions quantifiable. So this eval run tells me that:
+* We improved in a few ways
+    * Recall@1 - was 0.033 and is now 0.1 (still bad, but improved)
+    * Type hit was higher (unexpected, 10%, may just be noise)
+* We also degraded performance in a few ways
+    * Recall@5 is lower - fewer right answers in top 5 (unexpected)
+    * recall@20 is lower - more correct answers missing entirely
+    * slight drop in MRR - the opposite of what we expected
+    * drop in attribute overlap
+    * Cost and latency are much worse (2x token usage, ~40% more p95 latency)
+
+I decided to make the following adjustments - drawing a hard line at changing pipeline topology, hoping to only tweak/fine tune from here.
+* Goals:
+    * Improve recall @ 1/5/20
+    * Improve MRR
+* Changes:
+* Increase rerank top n parameter from 10 to 20
+    * This should improve our MRR scores as the recall @ 20 is considerably higher
+* Add an enum for types in each caegory to the vision prompt
+    * This should increase our type matching accuracy
+
+Here are the eval results from that:
+```
+OpenAI API key (input hidden): 
+=== Eval results (overall) ===
+n              30
+recall@1       0.100
+recall@5       0.267
+recall@20      0.567
+mrr            0.191
+category-hit   0.933
+type-hit       0.567
+attr-overlap   0.139
+p50 latency    12562 ms
+p95 latency    15446 ms
+tokens (total) 1598084
+cost           $0.24491
+failures       missing=13 categoryMiss=2 typeMiss=13
+
+=== By category ===
+category        n   r@1    r@5    r@20   mrr    attr   $         
+Beds            2   0.000  0.000  1.000  0.139  0.100  $0.01629  
+Benches         2   0.000  0.000  0.000  0.000  0.000  $0.01633  
+Bookshelves     2   0.000  0.000  0.500  0.071  0.250  $0.01631  
+Cabinets        2   0.000  0.000  0.500  0.045  0.100  $0.01636  
+Chairs          2   0.000  0.500  0.500  0.100  0.000  $0.01626  
+Coffee Tables   2   0.000  0.000  0.500  0.036  0.000  $0.01631  
+Desks           2   0.000  0.000  0.500  0.025  0.250  $0.01640  
+Dressers        2   0.000  0.000  0.000  0.000  0.000  $0.01631  
+Lighting        2   0.000  0.500  1.000  0.196  0.250  $0.01631  
+Nightstands     2   0.000  1.000  1.000  0.375  0.000  $0.01636  
+Ottomans        2   0.500  0.500  0.500  0.500  0.350  $0.01632  
+Sofas           2   0.500  0.500  1.000  0.583  0.333  $0.01633  
+TV Stands       2   0.500  0.500  0.500  0.500  0.350  $0.01636  
+Tables          2   0.000  0.500  1.000  0.295  0.100  $0.01630  
+Wardrobes       2   0.000  0.000  0.000  0.000  0.000  $0.01637  
+```
+Analysis:
+* Best run so far on MRR
+* Type hit increased
+* More stable (p95 latency dropped >10s) - unrelated, probably
+* The ROI question is still very much open - rerank still hasn't beat the baseline recall
+* The hypothesis about higher top-N for rerank = better recall is highly questioned
+* The hypothesis about type enums seems to have helped, but not by a huge amount (maybe too many values)
+* It's possible that the LLM rerank is nudging right answers out of the top 5/20
+
+I decided to call ait at this point. I'm ~1.5 hours over time already and if I keep going there will be no end to this - super super interesting problem space!
 
 # Future ideas
+* Increase K values (search results) and N values (rerank) to see if we get higher recall & MRR
+* Fine tune rerank to improve MRR & recall
+* Split type identifyer into its own agent
+* Fine tune model sizes for each step
+* Explore perceptual hashing (pHash, aHash, dHash, pHash, wHash) as the search mechanism
+    * This only applies if the db could point to product images
+        * Or the db ingest pipeline can use product images to calculate and store these pHashes
+    * Latency is becoming an issue, there are other ways to solve it for sure
+    * But this would essentially make the whole search one single deterministic operation
+    * Basically, downscale an image to a fixed size, hash pixel values, then find "similar" results
+    * This is a far-fetched idea that might well not pan out - but it would lean heavily on the side of low-latency and low cost, so it'd be worth some digging IMO. Even if it doesn't replace search entirely, it could be a useful layer.
 * Attribute weighted scoring to improve quality of results
 * Filtering to improve performance
-* Add multiple AI providers
+* Add multiple AI providers for flexibility / iteration
