@@ -111,3 +111,78 @@ export interface ApiError {
    * `invalid_api_key`), when applicable. Safe to surface. */
   upstreamCode?: string;
 }
+
+/**
+ * Mirror of the backend's mutable `Config` — every knob the admin UI can
+ * read or write. Excludes anything that would be a secret (API keys never
+ * live in `Config`; the admin password is env-only). Kept in sync with
+ * `backend/src/config/store.ts` by Task A1.
+ */
+export interface AdminConfig {
+  topK: number;
+  rerank: boolean;
+  provider: "openai";
+  visionModel: string;
+  visionPrompt: string;
+  rerankModel: string;
+  rerankPrompt: string;
+  rerankTopN: number;
+}
+
+/**
+ * Patch shape accepted by `POST /admin/config`. Any subset of `AdminConfig`
+ * keys; unknown keys are rejected server-side by `validateConfig`.
+ */
+export type AdminConfigUpdate = Partial<AdminConfig>;
+
+/**
+ * One row appended to `backend/eval/history.jsonl` per `npm run eval` run.
+ * Matches the JSONL schema agreed in `plans/eval-harness.md` Task E8 — the
+ * frontend admin history table consumes this via `GET /admin/history`
+ * rather than reaching into `backend/eval/types.ts`.
+ */
+export interface HistoryRow {
+  /** ISO-8601 UTC timestamp of when the eval run started. */
+  ts: string;
+  /** Full git SHA of the worktree at run time (short-rendered in the UI). */
+  gitSha: string;
+  /** True if the worktree had uncommitted changes at run time. */
+  gitDirty: boolean;
+  /** Identifier of the gold-set fixtures used (e.g. `"v1"`). */
+  goldSetVersion: string;
+  /** Number of gold items the run scored. */
+  n: number;
+  /** Snapshot of the live `AdminConfig` the run was executed against. */
+  config: AdminConfig;
+  /** Aggregate metrics across all gold items in the run. */
+  metrics: {
+    recallAt1: number;
+    recallAt5: number;
+    recallAt20: number;
+    mrr: number;
+    meanAttributeOverlap: number;
+    categoryHitRate: number;
+    typeHitRate: number;
+    p50LatencyMs: number;
+    p95LatencyMs: number;
+    totalTokens: number;
+    totalCostUsd: number;
+    /** Counts of each error `code` observed during the run, keyed by code. */
+    failureCounts: Record<string, number>;
+  };
+  /** Per-category breakdown — same metric keys as `metrics`, all optional
+   *  because a category may not have enough samples to compute every one. */
+  byCategory: Record<string, Partial<HistoryRow["metrics"]>>;
+}
+
+/** Response shape for `GET /admin/history`. Newest-first, capped server-side. */
+export interface HistoryResponse {
+  rows: HistoryRow[];
+}
+
+/** Closed set of error codes the admin surface returns in `ApiError.code`. */
+export type AdminErrorCodes =
+  | "ADMIN_AUTH_REQUIRED"
+  | "ADMIN_AUTH_INVALID"
+  | "ADMIN_CONFIG_INVALID"
+  | "ADMIN_HISTORY_UNAVAILABLE";
